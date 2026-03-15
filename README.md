@@ -69,10 +69,12 @@ python run_long_experiment.py \
   --duration-sec 60 \
   --analysis-fps 12 \
   --enable-semantic \
-  --qwen-model Qwen/Qwen2.5-VL-3B-Instruct \
+  --qwen-model Qwen/Qwen2.5-VL-7B-Instruct \
   --qwen-device cuda:0 \
   --disable-sam2
 ```
+
+For a larger Qwen checkpoint that can shard across both A40s, pass a model id such as `Qwen/Qwen2.5-VL-32B-Instruct` with `--qwen-device-map auto`.
 
 If you want SAM2 outputs as well, pass a local config and checkpoint:
 
@@ -98,5 +100,6 @@ python docs/render_report_pdf.py --input docs/nonverbal_eval_research_report.md 
 
 - The current MediaPipe/TFLite path is effectively CPU-bound in this environment. The two available A40 GPUs are not the main acceleration path for the current inference stack.
 - The semantic layer is strictly additive. It writes separate semantic artifacts and does not change the existing heuristic score formulas.
-- Qwen can run with the optional `transformers` dependency. SAM2 has a stricter torch requirement and is therefore gated behind explicit config/checkpoint arguments and version checks.
+- The default semantic model is now `Qwen/Qwen2.5-VL-7B-Instruct`, which is a stronger drop-in upgrade over the earlier `3B` path for this repo's frame-level semantic review tasks.
+- Qwen can run with the optional `transformers` and `accelerate` dependencies. SAM2 has a stricter torch requirement and is therefore gated behind explicit config/checkpoint arguments and version checks.
 - `.codex/`, workspace session logs, and unrelated local state are intentionally excluded.

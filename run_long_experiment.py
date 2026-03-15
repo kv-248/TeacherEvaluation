@@ -239,8 +239,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--semantic-sample-interval-sec", type=float, default=6.0, help="Uniform sampling interval for semantic review frames.")
     parser.add_argument("--semantic-max-samples", type=int, default=8, help="Maximum number of sampled frames for semantic review.")
     parser.add_argument("--disable-qwen", action="store_true", help="Skip the Qwen semantic annotator.")
-    parser.add_argument("--qwen-model", type=str, default="Qwen/Qwen2.5-VL-3B-Instruct", help="Transformers model id for Qwen vision-language inference.")
-    parser.add_argument("--qwen-device", type=str, default="cuda:0", help="Device for the Qwen model, for example cuda:0 or cpu.")
+    parser.add_argument("--qwen-model", type=str, default="Qwen/Qwen2.5-VL-7B-Instruct", help="Transformers model id for Qwen vision-language inference.")
+    parser.add_argument("--qwen-device", type=str, default="cuda:0", help="Device for the Qwen model, for example cuda:0, cpu, or auto.")
+    parser.add_argument("--qwen-device-map", type=str, default="", help="Optional transformers device_map value such as auto for larger Qwen checkpoints.")
     parser.add_argument("--qwen-dtype", type=str, default="bfloat16", help="Torch dtype for Qwen model loading.")
     parser.add_argument("--qwen-max-new-tokens", type=int, default=180, help="Maximum generated tokens for each semantic frame prompt.")
     parser.add_argument("--qwen-temperature", type=float, default=0.1, help="Sampling temperature for the Qwen semantic prompt.")
@@ -319,6 +320,7 @@ def main() -> None:
             qwen_enabled=not args.disable_qwen,
             qwen_model=args.qwen_model,
             qwen_device=args.qwen_device,
+            qwen_device_map=args.qwen_device_map or None,
             qwen_dtype=args.qwen_dtype,
             qwen_max_new_tokens=args.qwen_max_new_tokens,
             qwen_temperature=args.qwen_temperature,
@@ -334,6 +336,7 @@ def main() -> None:
             sam2_enabled=semantic_config.sam2_enabled,
             qwen_model=semantic_config.qwen_model,
             qwen_device=semantic_config.qwen_device,
+            qwen_device_map=semantic_config.qwen_device_map,
             sam2_model_cfg=semantic_config.sam2_model_cfg,
             sam2_checkpoint=str(semantic_config.sam2_checkpoint) if semantic_config.sam2_checkpoint else None,
             sam2_device=semantic_config.sam2_device,

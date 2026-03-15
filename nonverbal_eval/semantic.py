@@ -22,8 +22,9 @@ class SemanticConfig:
     sample_interval_sec: float = 6.0
     max_samples: int = 8
     qwen_enabled: bool = True
-    qwen_model: str = "Qwen/Qwen2.5-VL-3B-Instruct"
+    qwen_model: str = "Qwen/Qwen2.5-VL-7B-Instruct"
     qwen_device: str = "cuda:0"
+    qwen_device_map: str | None = None
     qwen_dtype: str = "bfloat16"
     qwen_max_new_tokens: int = 180
     qwen_temperature: float = 0.1
@@ -251,6 +252,7 @@ def _run_qwen(samples: list[SemanticSample], config: SemanticConfig, events_path
         "reason": "Qwen semantic analysis disabled.",
         "model": config.qwen_model,
         "device": config.qwen_device,
+        "device_map": config.qwen_device_map,
         "annotations": [],
         "aggregate": {},
     }
@@ -291,23 +293,42 @@ def _run_qwen(samples: list[SemanticSample], config: SemanticConfig, events_path
     }
     device = config.qwen_device
     torch_dtype = dtype_map.get(config.qwen_dtype.lower(), torch.bfloat16)
+    device_map = config.qwen_device_map
+    if device.lower() == "auto" and not device_map:
+        device_map = "auto"
+
+    def generation_device_for(model: Any, fallback_device: str) -> str:
+        hf_device_map = getattr(model, "hf_device_map", None)
+        if isinstance(hf_device_map, dict):
+            for mapped_device in hf_device_map.values():
+                if isinstance(mapped_device, str) and mapped_device not in {"cpu", "disk"}:
+                    return mapped_device
+        try:
+            return str(next(model.parameters()).device)
+        except Exception:
+            return fallback_device
 
     try:
         processor = processor_cls.from_pretrained(config.qwen_model, trust_remote_code=True)
-        model = model_cls.from_pretrained(
-            config.qwen_model,
-            dtype=torch_dtype,
-            low_cpu_mem_usage=True,
-            trust_remote_code=True,
-        )
-        if device.startswith("cuda") and not torch.cuda.is_available():
-            device = "cpu"
-        model = model.to(device)
+        load_kwargs: dict[str, Any] = {
+            "dtype": torch_dtype,
+            "low_cpu_mem_usage": True,
+            "trust_remote_code": True,
+        }
+        if device_map:
+            load_kwargs["device_map"] = device_map
+        model = model_cls.from_pretrained(config.qwen_model, **load_kwargs)
+        if device_map is None:
+            if device.startswith("cuda") and not torch.cuda.is_available():
+                device = "cpu"
+            model = model.to(device)
         model.eval()
     except Exception as exc:
         result["status"] = "failed"
         result["reason"] = f"Could not load Qwen model: {type(exc).__name__}: {exc}"
         return result
+
+    device_for_inputs = generation_device_for(model, device)
 
     annotations: list[dict[str, Any]] = []
     try:
@@ -330,7 +351,7 @@ def _run_qwen(samples: list[SemanticSample], config: SemanticConfig, events_path
             model_inputs: dict[str, Any] = {}
             for key, value in inputs.items():
                 if hasattr(value, "to"):
-                    model_inputs[key] = value.to(device)
+                    model_inputs[key] = value.to(device_for_inputs)
                 else:
                     model_inputs[key] = value
             with torch.inference_mode():
