@@ -1,0 +1,126 @@
+{
+  "clip": {
+    "clip_video": "/workspace/artifacts/nonverbal_eval_debug3/run_20260315T193444Z/clip_5s.mp4",
+    "start_sec": 120.0,
+    "duration_sec_requested": 5.0,
+    "duration_sec_actual": 5.038371705038372,
+    "fps": 29.97,
+    "frames_written": 152
+  },
+  "quality_control": {
+    "pose_coverage": 1.0,
+    "face_coverage": 1.0,
+    "hand_coverage": 0.993421052631579,
+    "frames_analyzed": 152
+  },
+  "scores": {
+    "audience_orientation_score": 65.87568377738062,
+    "posture_stability_score": 81.63552227621518,
+    "gesture_activity_score": 88.30926991214278,
+    "gesture_smoothness_score": 74.47916816252646,
+    "facial_expressivity_score": 20.040733668790477,
+    "stage_usage_score": 55.34519048837514,
+    "natural_movement_score": 72.05328002340485,
+    "positive_affect_score": 45.41883480440573,
+    "enthusiasm_score": 62.01320588302163,
+    "confidence_presence_score": 81.49869015751102,
+    "eye_contact_distribution_score": 71.78764716588807,
+    "alertness_score": 84.25336181607874,
+    "heuristic_nonverbal_score": 71.13718505334367
+  },
+  "category_feedback": {
+    "gesture_and_facial_expression": {
+      "natural_movement_score": 72.05328002340485,
+      "positive_affect_score": 45.41883480440573,
+      "enthusiasm_score": 62.01320588302163,
+      "static_behavior_risk": 0.0,
+      "excessive_animation_risk": 0.0,
+      "tension_hostility_risk": 9.248122675430965,
+      "rigidity_risk": 6.0749650596888145
+    },
+    "posture_and_presence": {
+      "upright_relaxed_posture_score": 81.63552227621518,
+      "confidence_presence_score": 81.49869015751102,
+      "closed_posture_risk": 10.42778996870787,
+      "grooming_assessment": {
+        "status": "manual_review_required",
+        "reason": "A landmark-only pipeline is not a validated or fair way to score grooming or professional appearance."
+      }
+    },
+    "eye_contact_and_engagement": {
+      "audience_orientation_score": 65.87568377738062,
+      "eye_contact_distribution_score": 71.78764716588807,
+      "room_scan_score": 91.37996688741721,
+      "alertness_score": 84.25336181607874,
+      "sector_balance_score": 68.19313168166676,
+      "sector_distribution": {
+        "left": 57,
+        "center": 3,
+        "right": 92
+      },
+      "gaze_transition_count": 2,
+      "gaze_transition_rate_per_sec": 0.3969536423841059
+    },
+    "manual_review_items": [
+      "Speech-gesture synchronization is intentionally out of scope in this version.",
+      "Professional grooming/appearance requires manual review."
+    ]
+  },
+  "raw_metrics": {
+    "gesture_extent_mean": 1.2712321143510683,
+    "arm_span_mean": 1.9363521921225944,
+    "gesture_motion_mean": 0.024645353350755045,
+    "gesture_motion_peak": 0.1293136551840611,
+    "gesture_motion_std": 0.023694093398567168,
+    "open_palm_ratio": 0.9539473684210527,
+    "pointing_ratio": 0.0,
+    "fist_ratio": 0.05263157894736842,
+    "smile_proxy_mean": 0.3467960821259554,
+    "smile_proxy_std": 0.01922287311557083,
+    "mouth_open_mean": 0.21038413015507765,
+    "mouth_open_std": 0.1631089353291097,
+    "eye_open_mean": 0.3855563849338342,
+    "brow_eye_mean": 0.16170606588873326,
+    "signed_yaw_std": 0.724906960608617,
+    "stage_range": 0.1838974952697754,
+    "ldlj_smoothness_raw": 13.164382258314435,
+    "sal_smoothness_raw": -2.4992522449005965
+  },
+  "interpretation": {
+    "audience_orientation": "moderate",
+    "posture_stability": "strong",
+    "gesture_activity": "strong",
+    "gesture_smoothness": "moderate",
+    "facial_expressivity": "limited",
+    "natural_movement": "moderate",
+    "positive_affect": "limited",
+    "enthusiasm": "moderate",
+    "confidence_presence": "strong",
+    "eye_contact_distribution": "moderate",
+    "alertness": "strong",
+    "static_behavior_risk": "low",
+    "excessive_animation_risk": "low",
+    "tension_hostility_risk": "low",
+    "rigidity_risk": "low",
+    "closed_posture_risk": "low",
+    "overall_nonverbal_signal": "moderate"
+  },
+  "warnings": [],
+  "notes": [
+    "These scores are heuristic nonverbal proxies based on pretrained landmark detectors.",
+    "They are suited to reflective feedback, not high-stakes evaluation or causal claims about teaching quality.",
+    "Eye-contact distribution is approximated from head/face orientation and sector changes, not true pupil-level gaze."
+  ],
+  "feedback": {
+    "strengths": [
+      "Gesture movement looks natural rather than statue-like or mechanical.",
+      "Posture is upright and stable, supporting a confident classroom presence.",
+      "Body openness and stance suggest confident delivery rather than closed-off presentation.",
+      "Head and gaze behavior show some distribution across audience sectors rather than a single fixed target.",
+      "The instructor appears alert and attentive to the room."
+    ],
+    "watch_items": [
+      "No major risk flags in this short clip; validate on longer spans before drawing conclusions."
+    ]
+  }
+}

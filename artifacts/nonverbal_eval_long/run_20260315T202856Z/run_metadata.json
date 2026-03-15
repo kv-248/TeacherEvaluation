@@ -1,0 +1,219 @@
+{
+  "source_video": "/workspace/Lecture_1_cut_1m_to_5m.mp4",
+  "video_info": {
+    "fps": 29.97002997002997,
+    "frames": 7254,
+    "duration_sec": 242.0418,
+    "width": 854,
+    "height": 480
+  },
+  "extracted_clip_info": {
+    "source_video": "/workspace/Lecture_1_cut_1m_to_5m.mp4",
+    "clip_video": "/workspace/artifacts/nonverbal_eval_long/run_20260315T202856Z/full_segment_reference.mp4",
+    "start_sec": 92.5,
+    "duration_sec_requested": 60.0,
+    "duration_sec_actual": 60.083333333333336,
+    "fps": 12.0,
+    "source_fps": 29.97002997002997,
+    "width": 854,
+    "height": 480,
+    "frames_written": 721
+  },
+  "summary": {
+    "clip": {
+      "clip_video": "/workspace/artifacts/nonverbal_eval_long/run_20260315T202856Z/full_segment_reference.mp4",
+      "start_sec": 92.5,
+      "duration_sec_requested": 60.0,
+      "fps": 12.0,
+      "frames_written": 721,
+      "duration_sec_actual": 60.0
+    },
+    "quality_control": {
+      "pose_coverage": 1.0,
+      "face_coverage": 0.9902912621359223,
+      "hand_coverage": 0.9750346740638003,
+      "frames_analyzed": 721
+    },
+    "scores": {
+      "audience_orientation_score": 70.89892007446632,
+      "posture_stability_score": 79.41513007763739,
+      "gesture_activity_score": 100.0,
+      "gesture_smoothness_score": 56.811445079624214,
+      "facial_expressivity_score": 26.41966784096823,
+      "stage_usage_score": 90.8813192294194,
+      "natural_movement_score": 24.298091345905597,
+      "positive_affect_score": 49.77222261219674,
+      "enthusiasm_score": 52.32131329664208,
+      "confidence_presence_score": 65.7402139537539,
+      "eye_contact_distribution_score": 79.88504839564521,
+      "alertness_score": 85.09421504563112,
+      "heuristic_nonverbal_score": 58.401689099461876
+    },
+    "category_feedback": {
+      "gesture_and_facial_expression": {
+        "natural_movement_score": 24.298091345905597,
+        "positive_affect_score": 49.77222261219674,
+        "enthusiasm_score": 52.32131329664208,
+        "static_behavior_risk": 0.0,
+        "excessive_animation_risk": 60.984908319960226,
+        "tension_hostility_risk": 7.020319648898815,
+        "rigidity_risk": 0.0
+      },
+      "posture_and_presence": {
+        "upright_relaxed_posture_score": 79.41513007763739,
+        "confidence_presence_score": 65.7402139537539,
+        "closed_posture_risk": 36.9134830187273,
+        "grooming_assessment": {
+          "status": "manual_review_required",
+          "reason": "A landmark-only pipeline is not a validated or fair way to score grooming or professional appearance."
+        }
+      },
+      "eye_contact_and_engagement": {
+        "audience_orientation_score": 70.89892007446632,
+        "eye_contact_distribution_score": 79.88504839564521,
+        "room_scan_score": 82.10144927536231,
+        "alertness_score": 85.09421504563112,
+        "sector_balance_score": 90.17212716303686,
+        "sector_distribution": {
+          "left": 323,
+          "center": 94,
+          "right": 297
+        },
+        "gaze_transition_count": 46,
+        "gaze_transition_rate_per_sec": 0.7666666666666667
+      },
+      "manual_review_items": [
+        "Speech-gesture synchronization is intentionally out of scope in this version.",
+        "Professional grooming/appearance requires manual review."
+      ]
+    },
+    "raw_metrics": {
+      "gesture_extent_mean": 1.5675774329588863,
+      "arm_span_mean": 0.9120118818943154,
+      "gesture_motion_mean": 0.06246322969825886,
+      "gesture_motion_peak": 1.0953918414353316,
+      "gesture_motion_std": 0.08858846493576285,
+      "open_palm_ratio": 0.8030513176144244,
+      "pointing_ratio": 0.005547850208044383,
+      "fist_ratio": 0.11927877947295423,
+      "smile_proxy_mean": 0.3439535550882313,
+      "smile_proxy_std": 0.025574989574889212,
+      "mouth_open_mean": 0.192807070812372,
+      "mouth_open_std": 0.1697511450704894,
+      "eye_open_mean": 0.3852923942514341,
+      "brow_eye_mean": 0.17525231797893615,
+      "signed_yaw_std": 0.6090282543257373,
+      "stage_range": 0.2762914299964905,
+      "ldlj_smoothness_raw": 21.21853848670191,
+      "sal_smoothness_raw": -4.96918297486916
+    },
+    "interpretation": {
+      "audience_orientation": "moderate",
+      "posture_stability": "strong",
+      "gesture_activity": "strong",
+      "gesture_smoothness": "moderate",
+      "facial_expressivity": "limited",
+      "natural_movement": "limited",
+      "positive_affect": "limited",
+      "enthusiasm": "limited",
+      "confidence_presence": "moderate",
+      "eye_contact_distribution": "strong",
+      "alertness": "strong",
+      "static_behavior_risk": "low",
+      "excessive_animation_risk": "moderate",
+      "tension_hostility_risk": "low",
+      "rigidity_risk": "low",
+      "closed_posture_risk": "moderate",
+      "overall_nonverbal_signal": "moderate"
+    },
+    "warnings": [],
+    "notes": [
+      "These scores are heuristic nonverbal proxies based on pretrained landmark detectors.",
+      "They are suited to reflective feedback, not high-stakes evaluation or causal claims about teaching quality.",
+      "Eye-contact distribution is approximated from head/face orientation and sector changes, not true pupil-level gaze."
+    ],
+    "feedback": {
+      "strengths": [
+        "Posture is upright and stable, supporting a confident classroom presence.",
+        "Head and gaze behavior show some distribution across audience sectors rather than a single fixed target.",
+        "The instructor appears alert and attentive to the room."
+      ],
+      "watch_items": [
+        "Movement may occasionally become more animated than needed for the teaching point.",
+        "Body posture trends somewhat closed; monitor slouching or arm positions that reduce openness."
+      ]
+    }
+  },
+  "windowing": {
+    "window_sec": 15.0,
+    "window_step_sec": 15.0,
+    "window_count": 4,
+    "best_window": {
+      "window_local_start_sec": 30.0,
+      "window_local_end_sec": 45.0,
+      "window_start_sec": 122.5,
+      "window_end_sec": 137.5,
+      "window_duration_sec": 15.0,
+      "pose_coverage": 1.0,
+      "face_coverage": 1.0,
+      "hand_coverage": 0.9722222222222222,
+      "natural_movement_score": 36.85232442594988,
+      "positive_affect_score": 54.21350169444945,
+      "enthusiasm_score": 49.72271907133638,
+      "posture_stability_score": 85.61978369368525,
+      "confidence_presence_score": 74.60605861256646,
+      "audience_orientation_score": 80.83182315532582,
+      "eye_contact_distribution_score": 80.74553520400663,
+      "alertness_score": 89.93548205470331,
+      "static_behavior_risk": 0.0,
+      "excessive_animation_risk": 56.862197392923655,
+      "tension_hostility_risk": 3.635809342817231,
+      "rigidity_risk": 0.0,
+      "closed_posture_risk": 16.31515369468967,
+      "heuristic_nonverbal_score": 64.65506433190028
+    },
+    "worst_window": {
+      "window_local_start_sec": 0.0,
+      "window_local_end_sec": 15.0,
+      "window_start_sec": 92.5,
+      "window_end_sec": 107.5,
+      "window_duration_sec": 15.0,
+      "pose_coverage": 1.0,
+      "face_coverage": 0.9944444444444445,
+      "hand_coverage": 0.9944444444444445,
+      "natural_movement_score": 20.73977251499006,
+      "positive_affect_score": 49.26409027017113,
+      "enthusiasm_score": 40.69080016643588,
+      "posture_stability_score": 75.81025624684682,
+      "confidence_presence_score": 55.33530139944509,
+      "audience_orientation_score": 68.16130655447141,
+      "eye_contact_distribution_score": 74.5732307569324,
+      "alertness_score": 83.19146884039547,
+      "static_behavior_risk": 0.0,
+      "excessive_animation_risk": 76.7367852924843,
+      "tension_hostility_risk": 5.159241964184037,
+      "rigidity_risk": 0.0,
+      "closed_posture_risk": 67.81564965203268,
+      "heuristic_nonverbal_score": 52.78680175795848
+    }
+  },
+  "timings_sec": {
+    "extract_segment_sec": 3.0299102663993835,
+    "evaluate_full_clip_sec": 90.30911312252283,
+    "keyframe_and_summary_sec": 0.5323380827903748,
+    "window_aggregation_sec": 0.06880680471658707,
+    "window_figures_sec": 0.7318780794739723
+  },
+  "artifacts": {
+    "per_frame_csv": "/workspace/artifacts/nonverbal_eval_long/run_20260315T202856Z/per_frame_metrics_full.csv",
+    "summary_json": "/workspace/artifacts/nonverbal_eval_long/run_20260315T202856Z/summary_full.json",
+    "summary_md": "/workspace/artifacts/nonverbal_eval_long/run_20260315T202856Z/summary_full.md",
+    "annotated_keyframe": "/workspace/artifacts/nonverbal_eval_long/run_20260315T202856Z/keyframe_mid_annotated.jpg",
+    "timeline_plot": "/workspace/artifacts/nonverbal_eval_long/run_20260315T202856Z/metric_timelines_full.png",
+    "window_csv": "/workspace/artifacts/nonverbal_eval_long/run_20260315T202856Z/window_summary.csv",
+    "window_json": "/workspace/artifacts/nonverbal_eval_long/run_20260315T202856Z/window_summary.json",
+    "window_md": "/workspace/artifacts/nonverbal_eval_long/run_20260315T202856Z/window_summary.md",
+    "window_score_plot": "/workspace/artifacts/nonverbal_eval_long/run_20260315T202856Z/window_score_trends.png",
+    "window_risk_plot": "/workspace/artifacts/nonverbal_eval_long/run_20260315T202856Z/window_risk_trends.png"
+  }
+}

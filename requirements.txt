@@ -1,0 +1,9 @@
+opencv-python
+mediapipe
+matplotlib
+numpy
+pandas
+scipy
+Pillow
+markdown
+weasyprint
