@@ -21,6 +21,7 @@ from nonverbal_eval import (
     summarize_frame_metrics,
 )
 from nonverbal_eval.pipeline import log_event
+from nonverbal_eval.semantic import SemanticConfig, run_semantic_extensions
 
 
 def _timestamp() -> str:
@@ -234,6 +235,19 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--window-sec", type=float, default=15.0, help="Window size for lecture-level summaries.")
     parser.add_argument("--window-step-sec", type=float, default=15.0, help="Window stride for lecture-level summaries.")
     parser.add_argument("--keyframe-offset-sec", type=float, default=-1.0, help="Keyframe offset inside the full analyzed segment. Negative means midpoint.")
+    parser.add_argument("--enable-semantic", action="store_true", help="Run optional SAM2/Qwen semantic analysis as additive evidence.")
+    parser.add_argument("--semantic-sample-interval-sec", type=float, default=6.0, help="Uniform sampling interval for semantic review frames.")
+    parser.add_argument("--semantic-max-samples", type=int, default=8, help="Maximum number of sampled frames for semantic review.")
+    parser.add_argument("--disable-qwen", action="store_true", help="Skip the Qwen semantic annotator.")
+    parser.add_argument("--qwen-model", type=str, default="Qwen/Qwen2.5-VL-3B-Instruct", help="Transformers model id for Qwen vision-language inference.")
+    parser.add_argument("--qwen-device", type=str, default="cuda:0", help="Device for the Qwen model, for example cuda:0 or cpu.")
+    parser.add_argument("--qwen-dtype", type=str, default="bfloat16", help="Torch dtype for Qwen model loading.")
+    parser.add_argument("--qwen-max-new-tokens", type=int, default=180, help="Maximum generated tokens for each semantic frame prompt.")
+    parser.add_argument("--qwen-temperature", type=float, default=0.1, help="Sampling temperature for the Qwen semantic prompt.")
+    parser.add_argument("--disable-sam2", action="store_true", help="Skip SAM2 mask extraction.")
+    parser.add_argument("--sam2-model-cfg", type=str, default="", help="SAM2 model config name or path.")
+    parser.add_argument("--sam2-checkpoint", type=Path, default=None, help="Path to a local SAM2 checkpoint.")
+    parser.add_argument("--sam2-device", type=str, default="cuda:1", help="Device for SAM2 inference, for example cuda:1 or cpu.")
     return parser.parse_args()
 
 
@@ -294,6 +308,47 @@ def main() -> None:
     annotate_keyframe(artifacts.keyframe_path, artifacts.annotated_keyframe_path, summary, config, artifacts.events_jsonl_path)
     save_summary_markdown(summary, artifacts)
     timings["keyframe_and_summary_sec"] = time.perf_counter() - t0
+
+    semantic_payload: dict[str, object] | None = None
+    if args.enable_semantic:
+        t0 = time.perf_counter()
+        semantic_config = SemanticConfig(
+            enabled=True,
+            sample_interval_sec=args.semantic_sample_interval_sec,
+            max_samples=args.semantic_max_samples,
+            qwen_enabled=not args.disable_qwen,
+            qwen_model=args.qwen_model,
+            qwen_device=args.qwen_device,
+            qwen_dtype=args.qwen_dtype,
+            qwen_max_new_tokens=args.qwen_max_new_tokens,
+            qwen_temperature=args.qwen_temperature,
+            sam2_enabled=not args.disable_sam2,
+            sam2_model_cfg=args.sam2_model_cfg or None,
+            sam2_checkpoint=args.sam2_checkpoint,
+            sam2_device=args.sam2_device,
+        )
+        log_event(
+            artifacts.events_jsonl_path,
+            "semantic_extensions_started",
+            qwen_enabled=semantic_config.qwen_enabled,
+            sam2_enabled=semantic_config.sam2_enabled,
+            qwen_model=semantic_config.qwen_model,
+            qwen_device=semantic_config.qwen_device,
+            sam2_model_cfg=semantic_config.sam2_model_cfg,
+            sam2_checkpoint=str(semantic_config.sam2_checkpoint) if semantic_config.sam2_checkpoint else None,
+            sam2_device=semantic_config.sam2_device,
+            sample_interval_sec=semantic_config.sample_interval_sec,
+            max_samples=semantic_config.max_samples,
+        )
+        semantic_payload = run_semantic_extensions(
+            clip_path=artifacts.clip_path,
+            frame_metrics_df=frame_metrics_df,
+            summary=summary,
+            run_dir=artifacts.root_dir,
+            config=semantic_config,
+            events_path=artifacts.events_jsonl_path,
+        )
+        timings["semantic_extensions_sec"] = time.perf_counter() - t0
 
     fps = float(summary["clip"]["fps"])
     windows = _window_slices(summary["clip"]["duration_sec_actual"], args.window_sec, args.window_step_sec)
@@ -381,6 +436,9 @@ def main() -> None:
             "window_risk_plot": str(risk_plot),
         },
     }
+    if semantic_payload is not None:
+        metadata["semantic_extensions"] = semantic_payload["summary"]
+        metadata["artifacts"]["semantic"] = semantic_payload["artifacts"]
     run_meta_json.write_text(json.dumps(metadata, indent=2), encoding="utf-8")
 
     log_event(
@@ -413,6 +471,13 @@ def main() -> None:
     )
     for key, value in timings.items():
         print(f"{key}: {value:.2f}s")
+    if semantic_payload is not None:
+        semantic_summary = semantic_payload["summary"]
+        print(f"Semantic samples: {semantic_summary['sample_count']}")
+        print(f"Qwen semantic status: {semantic_summary['qwen']['status']}")
+        print(f"SAM2 semantic status: {semantic_summary['sam2']['status']}")
+        semantic_artifacts = semantic_payload["artifacts"]
+        print(f"Semantic summary: {semantic_artifacts['summary_md']}")
 
 
 if __name__ == "__main__":

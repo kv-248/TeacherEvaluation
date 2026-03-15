@@ -1,0 +1,26 @@
+[
+  {
+    "window_local_start_sec":0.0,
+    "window_local_end_sec":5.0,
+    "window_start_sec":120.0,
+    "window_end_sec":125.0,
+    "window_duration_sec":5.0,
+    "pose_coverage":1.0,
+    "face_coverage":1.0,
+    "hand_coverage":0.9833333333,
+    "natural_movement_score":36.8873357936,
+    "positive_affect_score":42.3614633802,
+    "enthusiasm_score":47.2382785996,
+    "posture_stability_score":80.926849026,
+    "confidence_presence_score":80.9521871438,
+    "audience_orientation_score":65.1170169405,
+    "eye_contact_distribution_score":73.2363678124,
+    "alertness_score":83.8131597899,
+    "static_behavior_risk":0.0,
+    "excessive_animation_risk":39.3044637498,
+    "tension_hostility_risk":12.2779591316,
+    "rigidity_risk":7.7816530237,
+    "closed_posture_risk":11.2948377823,
+    "heuristic_nonverbal_score":61.0175321294
+  }
+]

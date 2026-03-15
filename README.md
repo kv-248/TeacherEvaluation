@@ -59,6 +59,34 @@ python run_segment_batch.py --video samples/Lecture_1_cut_1m_to_5m.mp4
 python run_long_experiment.py --video samples/Lecture_1_cut_1m_to_5m.mp4 --start-sec 92.5 --duration-sec 60 --analysis-fps 12
 ```
 
+Optional semantic layer with Qwen and SAM2 as additive outputs only:
+
+```bash
+pip install -r requirements_optional_semantic.txt
+python run_long_experiment.py \
+  --video samples/Lecture_1_cut_1m_to_5m.mp4 \
+  --start-sec 92.5 \
+  --duration-sec 60 \
+  --analysis-fps 12 \
+  --enable-semantic \
+  --qwen-model Qwen/Qwen2.5-VL-3B-Instruct \
+  --qwen-device cuda:0 \
+  --disable-sam2
+```
+
+If you want SAM2 outputs as well, pass a local config and checkpoint:
+
+```bash
+python run_long_experiment.py \
+  --video samples/Lecture_1_cut_1m_to_5m.mp4 \
+  --start-sec 92.5 \
+  --duration-sec 60 \
+  --analysis-fps 12 \
+  --enable-semantic \
+  --sam2-model-cfg <sam2_config.yaml> \
+  --sam2-checkpoint <sam2_checkpoint.pt>
+```
+
 To regenerate the report figures and PDF:
 
 ```bash
@@ -69,4 +97,6 @@ python docs/render_report_pdf.py --input docs/nonverbal_eval_research_report.md 
 ## Notes
 
 - The current MediaPipe/TFLite path is effectively CPU-bound in this environment. The two available A40 GPUs are not the main acceleration path for the current inference stack.
+- The semantic layer is strictly additive. It writes separate semantic artifacts and does not change the existing heuristic score formulas.
+- Qwen can run with the optional `transformers` dependency. SAM2 has a stricter torch requirement and is therefore gated behind explicit config/checkpoint arguments and version checks.
 - `.codex/`, workspace session logs, and unrelated local state are intentionally excluded.

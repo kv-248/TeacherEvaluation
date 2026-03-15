@@ -1,0 +1,6 @@
+transformers>=4.45.0
+
+# SAM2 is intentionally not auto-installed here because the official package
+# requires torch>=2.5.1, while the base evaluator currently runs on a lighter
+# torch stack. Install SAM2 separately in an isolated environment if needed:
+# git+https://github.com/facebookresearch/sam2.git

@@ -1,0 +1,6 @@
+{
+  "status": "unavailable",
+  "reason": "SAM2 requires torch>=2.5.1; current torch is 2.4.1+cu124.",
+  "annotations": [],
+  "aggregate": {}
+}

@@ -1,0 +1,71 @@
+{
+  "status": "completed",
+  "reason": "Qwen semantic analysis completed.",
+  "model": "Qwen/Qwen2.5-VL-3B-Instruct",
+  "device": "cuda:0",
+  "annotations": [
+    {
+      "timestamp_sec": 0.0,
+      "reason": "clip_start,uniform_sample,low_audience_orientation",
+      "raw_text": "{\n  \"teacher_focus\": \"audience\",\n  \"body_action\": \"open_palm_explaining\",\n  \"affect_tone\": \"neutral\",\n  \"posture_signal\": \"upright_open\",\n  \"attention_note\": \"Teacher gesturing to engage audience.\",\n  \"evidence_confidence\": \"high\",\n  \"rationale\": \"The teacher's open palm and expressive hand gestures indicate an attempt to engage the audience in the lecture.\"\n}",
+      "teacher_focus": "audience",
+      "body_action": "open_palm_explaining",
+      "affect_tone": "neutral",
+      "posture_signal": "upright_open",
+      "attention_note": "Teacher gesturing to engage audience.",
+      "evidence_confidence": "high",
+      "rationale": "The teacher's open palm and expressive hand gestures indicate an attempt to engage the audience in the lecture."
+    },
+    {
+      "timestamp_sec": 1.92,
+      "reason": "peak_posture,uniform_sample,peak_audience_orientation,peak_smile_proxy,clip_midpoint",
+      "raw_text": "{\n  \"teacher_focus\": \"board\",\n  \"body_action\": \"open_palm_explaining\",\n  \"affect_tone\": \"neutral\",\n  \"posture_signal\": \"upright_open\",\n  \"attention_note\": \"Teacher gesturing while explaining.\",\n  \"evidence_confidence\": \"high\",\n  \"rationale\": \"The teacher is actively engaging with the audience through hand gestures and appears to be explaining something on the board.\"\n}",
+      "teacher_focus": "board",
+      "body_action": "open_palm_explaining",
+      "affect_tone": "neutral",
+      "posture_signal": "upright_open",
+      "attention_note": "Teacher gesturing while explaining.",
+      "evidence_confidence": "high",
+      "rationale": "The teacher is actively engaging with the audience through hand gestures and appears to be explaining something on the board."
+    },
+    {
+      "timestamp_sec": 4.0,
+      "reason": "uniform_sample,clip_end,peak_gesture_motion",
+      "raw_text": "{\n  \"teacher_focus\": \"board\",\n  \"body_action\": \"open_palm_explaining\",\n  \"affect_tone\": \"neutral\",\n  \"posture_signal\": \"upright_open\",\n  \"attention_note\": \"Teacher gesturing towards the blackboard while explaining.\",\n  \"evidence_confidence\": \"high\",\n  \"rationale\": \"The teacher is actively engaging with the audience by gesturing towards the blackboard, indicating an interactive teaching style.\"\n}",
+      "teacher_focus": "board",
+      "body_action": "open_palm_explaining",
+      "affect_tone": "neutral",
+      "posture_signal": "upright_open",
+      "attention_note": "Teacher gesturing towards the blackboard while explaining.",
+      "evidence_confidence": "high",
+      "rationale": "The teacher is actively engaging with the audience by gesturing towards the blackboard, indicating an interactive teaching style."
+    }
+  ],
+  "aggregate": {
+    "sample_count": 3,
+    "audience_focus_ratio": 0.3333333333333333,
+    "board_focus_ratio": 0.6666666666666666,
+    "screen_focus_ratio": 0.0,
+    "notes_focus_ratio": 0.0,
+    "open_palm_explaining_ratio": 1.0,
+    "static_stance_ratio": 0.0,
+    "pointing_ratio": 0.0,
+    "writing_ratio": 0.0,
+    "warm_affect_ratio": 0.0,
+    "tense_affect_ratio": 0.0,
+    "closed_or_slouched_ratio": 0.0,
+    "focus_counts": {
+      "board": 2,
+      "audience": 1
+    },
+    "action_counts": {
+      "open_palm_explaining": 3
+    },
+    "affect_counts": {
+      "neutral": 3
+    },
+    "posture_counts": {
+      "upright_open": 3
+    }
+  }
+}
