@@ -12,6 +12,7 @@ This repository contains a research-backed nonverbal-cue evaluation pipeline for
   - multi-segment comparison runner
 - `run_long_experiment.py`
   - extended context-window inference runner
+  - now also supports teacher-facing coaching brief generation
 - `docs/`
   - report source, PDF, figure generator, PDF renderer, and generated figures
 - `artifacts/`
@@ -31,6 +32,14 @@ The report includes:
 - experiment results on the sample lecture video
 - the 1-minute context-window run at `12 fps`
 - debug and automation-boundary discussion
+
+The long-run runner can now emit a separate coaching artifact set:
+
+- `teacher_coaching_report.json`
+- `teacher_coaching_report.md`
+- `teacher_coaching_report.pdf`
+- `coaching_evidence.json`
+- `coaching_moments/`
 
 ## Key artifacts included
 
@@ -76,6 +85,30 @@ python run_long_experiment.py \
 
 For a larger Qwen checkpoint that can shard across both A40s, pass a model id such as `Qwen/Qwen2.5-VL-32B-Instruct` with `--qwen-device-map auto`.
 
+Teacher-facing coaching brief with targeted Qwen review and a local synthesis model:
+
+```bash
+python run_long_experiment.py \
+  --video samples/Lecture_1_cut_1m_to_5m.mp4 \
+  --start-sec 92.5 \
+  --duration-sec 60 \
+  --analysis-fps 12 \
+  --enable-coaching
+```
+
+Fast smoke test without downloading local Qwen weights:
+
+```bash
+python run_long_experiment.py \
+  --video samples/Lecture_1_cut_1m_to_5m.mp4 \
+  --start-sec 115 \
+  --duration-sec 20 \
+  --analysis-fps 12 \
+  --enable-coaching \
+  --disable-qwen \
+  --coach-fallback-template-only
+```
+
 If you want SAM2 outputs as well, pass a local config and checkpoint:
 
 ```bash
@@ -100,6 +133,9 @@ python docs/render_report_pdf.py --input docs/nonverbal_eval_research_report.md 
 
 - The current MediaPipe/TFLite path is effectively CPU-bound in this environment. The two available A40 GPUs are not the main acceleration path for the current inference stack.
 - The semantic layer is strictly additive. It writes separate semantic artifacts and does not change the existing heuristic score formulas.
+- The coaching layer is also strictly additive. It builds a separate teacher-facing brief from structured evidence and does not overwrite `summary_full.*` or `window_summary.*`.
 - The default semantic model is now `Qwen/Qwen2.5-VL-7B-Instruct`, which is a stronger drop-in upgrade over the earlier `3B` path for this repo's frame-level semantic review tasks.
+- The default coaching synthesis model is `Qwen/Qwen2.5-3B-Instruct`. If that model is unavailable, the runner falls back to a deterministic template-driven coaching brief.
 - Qwen can run with the optional `transformers` and `accelerate` dependencies. SAM2 has a stricter torch requirement and is therefore gated behind explicit config/checkpoint arguments and version checks.
+- The current runtime expects the legacy MediaPipe `solutions` API, so `requirements.txt` pins `mediapipe==0.10.21` and a compatible OpenCV/Numpy range.
 - `.codex/`, workspace session logs, and unrelated local state are intentionally excluded.

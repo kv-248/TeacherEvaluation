@@ -246,7 +246,12 @@ def _save_sampled_frames(
     return samples
 
 
-def _run_qwen(samples: list[SemanticSample], config: SemanticConfig, events_path: Path) -> dict[str, Any]:
+def _run_qwen(
+    samples: list[SemanticSample],
+    config: SemanticConfig,
+    events_path: Path,
+    event_name: str = "semantic_qwen_completed",
+) -> dict[str, Any]:
     result: dict[str, Any] = {
         "status": "skipped",
         "reason": "Qwen semantic analysis disabled.",
@@ -428,14 +433,15 @@ def _run_qwen(samples: list[SemanticSample], config: SemanticConfig, events_path
             "aggregate": aggregate,
         }
     )
-    log_event(
-        events_path,
-        "semantic_qwen_completed",
-        sample_count=len(annotations),
-        focus_counts=focus_counts,
-        action_counts=action_counts,
-        affect_counts=affect_counts,
-    )
+    if event_name:
+        log_event(
+            events_path,
+            event_name,
+            sample_count=len(annotations),
+            focus_counts=focus_counts,
+            action_counts=action_counts,
+            affect_counts=affect_counts,
+        )
     return result
 
 

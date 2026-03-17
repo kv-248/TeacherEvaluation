@@ -1,4 +1,6 @@
-.codex/
+.codex/*
+!.codex/agents/
+!.codex/agents/**
 __pycache__/
 *.pyc
 *.pyo
@@ -6,3 +8,5 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .DS_Store
+artifacts/test_*/
+local_data/

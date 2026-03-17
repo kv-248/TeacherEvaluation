@@ -1,0 +1,20 @@
+version = "0.1.0"
+purpose = "Skeleton for externalizing nonverbal heuristic thresholds and quality-control bands."
+
+[quality_control]
+pose_stable_min = 0.95
+face_stable_min = 0.95
+hand_stable_min = 0.85
+short_clip_sec = 4.5
+
+[interpretation_bands]
+strong_min = 75.0
+moderate_min = 55.0
+
+[risk_bands]
+high_min = 65.0
+moderate_min = 35.0
+
+[notes]
+status = "skeleton_only"
+comment = "Wave 2 will migrate hardcoded scoring thresholds into this config."

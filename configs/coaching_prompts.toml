@@ -1,0 +1,23 @@
+version = "0.1.0"
+purpose = "Skeleton for teacher-facing coaching synthesis prompts and fallback policy."
+
+[coaching_synthesis]
+model = "Qwen/Qwen2.5-3B-Instruct"
+status = "skeleton_only"
+fallback = "template"
+
+prompt = """
+Generate teacher-facing coaching advice from structured evidence only.
+Every action must cite timestamps and remain grounded to supplied observations.
+"""
+
+[output_contract]
+required_fields = [
+  "executive_summary",
+  "top_strengths",
+  "priority_actions",
+  "keep_doing",
+  "watch_for",
+  "confidence_notes",
+  "evidence_moments",
+]

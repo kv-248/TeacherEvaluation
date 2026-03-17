@@ -20,6 +20,7 @@ from nonverbal_eval import (
     save_summary_markdown,
     summarize_frame_metrics,
 )
+from nonverbal_eval.coaching import CoachingConfig, run_coaching_report
 from nonverbal_eval.pipeline import log_event
 from nonverbal_eval.semantic import SemanticConfig, run_semantic_extensions
 
@@ -249,6 +250,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--sam2-model-cfg", type=str, default="", help="SAM2 model config name or path.")
     parser.add_argument("--sam2-checkpoint", type=Path, default=None, help="Path to a local SAM2 checkpoint.")
     parser.add_argument("--sam2-device", type=str, default="cuda:1", help="Device for SAM2 inference, for example cuda:1 or cpu.")
+    parser.add_argument("--enable-coaching", action="store_true", help="Generate a teacher-facing coaching brief as an additive artifact.")
+    parser.add_argument("--coach-model", type=str, default="Qwen/Qwen2.5-3B-Instruct", help="Local text-only model used to synthesize the coaching brief.")
+    parser.add_argument("--coach-device", type=str, default="cuda:1", help="Device for the coaching text model, for example cuda:1 or cpu.")
+    parser.add_argument("--coach-max-windows", type=int, default=6, help="Maximum number of time windows to review in the coaching report.")
+    parser.add_argument("--coach-top-actions", type=int, default=3, help="Number of top-priority actions to include in the coaching brief.")
+    parser.add_argument("--coach-render-pdf", action=argparse.BooleanOptionalAction, default=True, help="Render the coaching brief to PDF in addition to markdown and JSON.")
+    parser.add_argument("--coach-fallback-template-only", action="store_true", help="Skip the small text model and use the deterministic coaching template only.")
     return parser.parse_args()
 
 
@@ -413,6 +421,49 @@ def main() -> None:
 
     best = window_df.sort_values("heuristic_nonverbal_score", ascending=False).iloc[0]
     worst = window_df.sort_values("heuristic_nonverbal_score", ascending=True).iloc[0]
+    coaching_payload: dict[str, object] | None = None
+    if args.enable_coaching:
+        t0 = time.perf_counter()
+        coaching_config = CoachingConfig(
+            enabled=True,
+            coach_model=args.coach_model,
+            coach_device=args.coach_device,
+            coach_max_windows=args.coach_max_windows,
+            coach_top_actions=args.coach_top_actions,
+            coach_render_pdf=args.coach_render_pdf,
+            coach_fallback_template_only=args.coach_fallback_template_only,
+            qwen_enabled=not args.disable_qwen,
+            qwen_model=args.qwen_model,
+            qwen_device=args.qwen_device,
+            qwen_device_map=args.qwen_device_map or None,
+            qwen_dtype=args.qwen_dtype,
+            qwen_max_new_tokens=args.qwen_max_new_tokens,
+            qwen_temperature=args.qwen_temperature,
+        )
+        log_event(
+            artifacts.events_jsonl_path,
+            "coaching_report_started",
+            coach_model=coaching_config.coach_model,
+            coach_device=coaching_config.coach_device,
+            coach_max_windows=coaching_config.coach_max_windows,
+            coach_top_actions=coaching_config.coach_top_actions,
+            coach_render_pdf=coaching_config.coach_render_pdf,
+            coach_fallback_template_only=coaching_config.coach_fallback_template_only,
+            qwen_enabled=coaching_config.qwen_enabled,
+            qwen_model=coaching_config.qwen_model,
+        )
+        coaching_payload = run_coaching_report(
+            clip_path=artifacts.clip_path,
+            frame_metrics_df=frame_metrics_df,
+            summary=summary,
+            window_df=window_df,
+            run_dir=artifacts.root_dir,
+            config=coaching_config,
+            events_path=artifacts.events_jsonl_path,
+            semantic_payload=semantic_payload,
+        )
+        timings["coaching_report_sec"] = time.perf_counter() - t0
+
     metadata = {
         "source_video": str(args.video),
         "video_info": video_info,
@@ -442,6 +493,9 @@ def main() -> None:
     if semantic_payload is not None:
         metadata["semantic_extensions"] = semantic_payload["summary"]
         metadata["artifacts"]["semantic"] = semantic_payload["artifacts"]
+    if coaching_payload is not None:
+        metadata["coaching_report"] = coaching_payload["report"]
+        metadata["artifacts"]["coaching"] = coaching_payload["artifacts"]
     run_meta_json.write_text(json.dumps(metadata, indent=2), encoding="utf-8")
 
     log_event(
@@ -481,6 +535,10 @@ def main() -> None:
         print(f"SAM2 semantic status: {semantic_summary['sam2']['status']}")
         semantic_artifacts = semantic_payload["artifacts"]
         print(f"Semantic summary: {semantic_artifacts['summary_md']}")
+    if coaching_payload is not None:
+        coaching_artifacts = coaching_payload["artifacts"]
+        print(f"Coaching report: {coaching_artifacts['report_md']}")
+        print(f"Coaching PDF: {coaching_artifacts['report_pdf']}")
 
 
 if __name__ == "__main__":

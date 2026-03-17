@@ -1,3 +1,4 @@
+# Optional model-backed layers for semantic review and coaching synthesis.
 transformers>=5.3.0
 accelerate>=1.1.0
 
