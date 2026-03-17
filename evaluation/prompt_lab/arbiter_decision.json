@@ -1,0 +1,258 @@
+{
+  "decision_id": "teacher_feedback_prompt_arbiter_2026-03-17",
+  "date": "2026-03-17",
+  "winner": "merged_actionability_with_precision_gates",
+  "status": "approved_for_worker_implementation",
+  "overall_reason": "Teacher usefulness is currently limited more by vague, label-like coaching than by missing structure, but the baseline artifacts show that actionability without stronger evidence gates keeps manufacturing weak corrections. The recommended path is to keep the actionability candidate as the wording and report-shaping base, then import the precision candidate's stricter issue-selection rules, maintenance mode, and uncertainty handling.",
+  "candidate_outcomes": {
+    "precision_first": {
+      "decision": "partial_keep",
+      "reason": "Keep its evidence bar, low-coverage caution, and no-forced-correction stance. Do not use it as the sole base because it under-specifies the next-lecture experiment framing that the quality review says is missing."
+    },
+    "actionability_first": {
+      "decision": "partial_keep",
+      "reason": "Keep it as the base because it best addresses the current actionability gap. Change the parts that can still turn weak affect, posture, or motion cues into overconfident actions."
+    }
+  },
+  "prompt_decisions": [
+    {
+      "id": "prompt_block_name",
+      "source": "precision_first",
+      "decision": "change",
+      "apply_to": "merged_prompt",
+      "instruction": "Use the live key name `coaching_synthesis`, not `coaching_synthesis_precision`, so the worker can drop the merged prompt into the existing config path."
+    },
+    {
+      "id": "json_contract_and_tone",
+      "source": "actionability_first",
+      "decision": "keep",
+      "apply_to": "merged_prompt",
+      "instruction": "Keep the current JSON contract, the coach-like tone, and the requirement to stay grounded in supplied evidence."
+    },
+    {
+      "id": "single_best_action_bias",
+      "source": "actionability_first",
+      "decision": "keep",
+      "apply_to": "merged_prompt",
+      "instruction": "Keep the rule to prefer one clear, high-leverage action over several weak ones, but only after the precision evidence bar is met."
+    },
+    {
+      "id": "experiment_framing",
+      "source": "actionability_first",
+      "decision": "keep",
+      "apply_to": "merged_prompt",
+      "instruction": "Keep the requirement that each priority action name the visible trigger, the adjustment to try, and the success check for the next lecture."
+    },
+    {
+      "id": "strengths_as_repeatable_behaviors",
+      "source": "actionability_first",
+      "decision": "keep",
+      "apply_to": "merged_prompt",
+      "instruction": "Keep the rule that strengths must describe repeatable visible behaviors worth preserving, not abstract praise."
+    },
+    {
+      "id": "metric_vs_semantic_disagreement",
+      "source": "actionability_first",
+      "decision": "keep",
+      "apply_to": "merged_prompt",
+      "instruction": "Keep the explicit requirement to mention mixed or disagreeing evidence in `confidence_notes` and choose the better-supported interpretation."
+    },
+    {
+      "id": "priority_action_evidence_bar",
+      "source": "precision_first",
+      "decision": "keep",
+      "apply_to": "merged_prompt",
+      "instruction": "Keep the rule that a priority action is allowed only when at least two independent cues align, or one cue is visually obvious and sustained strongly enough to stand on its own."
+    },
+    {
+      "id": "single_weak_proxy_block",
+      "source": "precision_first",
+      "decision": "keep",
+      "apply_to": "merged_prompt",
+      "instruction": "Keep the rule that a single weak proxy metric, a transient frame, or a short clip alone cannot create a priority action."
+    },
+    {
+      "id": "coverage_based_downgrade",
+      "source": "precision_first",
+      "decision": "keep",
+      "apply_to": "merged_prompt",
+      "instruction": "Keep the rule that low face, hand, or pose coverage must trigger explicit confidence language and should downgrade related affect, gaze, gesture, or posture claims."
+    },
+    {
+      "id": "neutral_affect_guardrail",
+      "source": "precision_first",
+      "decision": "keep",
+      "apply_to": "merged_prompt",
+      "instruction": "Keep the rule that neutral affect is not automatically a flaw and moderate positive-affect scores should not become a coaching issue without direct visual support."
+    },
+    {
+      "id": "closed_posture_guardrail",
+      "source": "precision_first",
+      "decision": "keep",
+      "apply_to": "merged_prompt",
+      "instruction": "Keep the rule that hand clasping, brief arm occlusion, or one cropped window are not enough to infer closed posture; require sustained torso or shoulder evidence."
+    },
+    {
+      "id": "mild_tendency_demotion",
+      "source": "precision_first",
+      "decision": "keep",
+      "apply_to": "merged_prompt",
+      "instruction": "Keep the rule that mild tendencies belong in `watch_for`, not `priority_actions`."
+    },
+    {
+      "id": "short_clip_and_medium_reliability_gate",
+      "source": "precision_first",
+      "decision": "keep",
+      "apply_to": "merged_prompt",
+      "instruction": "Keep the rule that short clips or medium-or-lower reliability should default to caution and should not be generalized across the lecture."
+    },
+    {
+      "id": "no_issue_mode",
+      "source": "precision_first",
+      "decision": "change",
+      "apply_to": "merged_prompt_and_worker",
+      "instruction": "Keep the no-forced-correction intent, but implement it as an explicit maintenance mode. The merged prompt should allow `priority_actions` to be empty when no action clears the bar, and the worker must stop treating empty `priority_actions` as invalid in that case."
+    },
+    {
+      "id": "executive_summary_shape",
+      "source": "actionability_first",
+      "decision": "change",
+      "apply_to": "merged_prompt",
+      "instruction": "Keep the summary cap and structure, but change the last sentence from always naming a next adjustment to naming either the single best adjustment or a maintenance verdict when no issue is warranted."
+    },
+    {
+      "id": "actionability_bias_affect_rule",
+      "source": "actionability_first",
+      "decision": "change",
+      "apply_to": "merged_prompt",
+      "instruction": "Change the rule `If the strongest cue is tense or neutral affect, make the action about resetting the face between sentences.` New direction: only use affect as the main lever when face visibility is sufficient and the evidence is directly visual, sustained, and stronger than posture or orientation evidence."
+    },
+    {
+      "id": "actionability_bias_posture_and_motion_rules",
+      "source": "actionability_first",
+      "decision": "change",
+      "apply_to": "merged_prompt",
+      "instruction": "Keep the cue-to-action mapping for posture, movement, and audience orientation, but only after the precision gates are satisfied. These rules should shape the coaching experiment, not force issue selection."
+    }
+  ],
+  "recommended_merged_direction": {
+    "base_prompt": "/workspace/TeacherEvaluation/evaluation/prompt_lab/prompt_candidate_actionability.toml",
+    "merge_in_from_precision": [
+      "Priority-action evidence bar: two aligned cues or one sustained obvious cue.",
+      "Explicit block on single weak proxy metrics, transient frames, and short clips as action triggers.",
+      "Coverage-aware confidence downgrades for face, hands, and pose.",
+      "Guardrails against neutral-affect and closed-posture overreach.",
+      "Watch-for instead of action when the evidence supports only a mild tendency.",
+      "Maintenance mode when no issue clears the bar."
+    ],
+    "keep_from_actionability": [
+      "Testable next-lecture experiment framing.",
+      "Visible trigger plus success-check language in `what_to_try_next`.",
+      "Repeatable strengths instead of abstract praise.",
+      "Explicit handling of source disagreement in `confidence_notes`."
+    ],
+    "drop_or_rewrite": [
+      "Do not keep the actionability candidate's affect-first bias as written.",
+      "Do not keep any wording that implies a correction is always required.",
+      "Do not keep precision wording that leaves the section name incompatible with the live config."
+    ],
+    "implementation_notes": [
+      "Maintenance mode is part prompt change and part worker change. The prompt should allow empty `priority_actions`; the worker should preserve that output instead of falling back or rejecting it.",
+      "The merged prompt should remain teacher-facing and should not reintroduce raw metric strings or pipeline notes into prose."
+    ]
+  },
+  "threshold_changes": [
+    {
+      "target": "coaching.action_gates.short_clip_action_min_sec",
+      "decision": "add",
+      "current": null,
+      "recommended": 30.0,
+      "reason": "The 20-second and 5-second reviewed clips should not have produced teacher-facing corrections from thin evidence. Below 30 seconds, default to maintenance, `watch_for`, or confidence language unless a cue is both strong and corroborated."
+    },
+    {
+      "target": "coaching.action_gates.min_supporting_windows",
+      "decision": "add",
+      "current": null,
+      "recommended": 2,
+      "reason": "The main posture and motion failures were single-window stories. Require cross-window support before promoting posture, movement, orientation, or affect into a priority action."
+    },
+    {
+      "target": "coaching.action_gates.single_window_strong_signal_min",
+      "decision": "add",
+      "current": null,
+      "recommended": 75.0,
+      "reason": "Allow a one-window exception only for clearly strong signals. This matches the existing strong-band logic better than the current moderate-threshold behavior."
+    },
+    {
+      "target": "coaching.action_gates.min_face_coverage_for_affect_or_eye_action",
+      "decision": "add",
+      "current": null,
+      "recommended": 0.55,
+      "reason": "Baseline cases below roughly 0.55 face coverage were consistently unstable for eye-contact and affect interpretation."
+    },
+    {
+      "target": "coaching.action_gates.min_hand_coverage_for_gesture_action",
+      "decision": "add",
+      "current": null,
+      "recommended": 0.40,
+      "reason": "Gesture claims became under-supported when hand coverage fell near or below 0.40, especially in screen-recording clips."
+    },
+    {
+      "target": "coaching.action_gates.min_pose_coverage_for_posture_action",
+      "decision": "add",
+      "current": null,
+      "recommended": 0.55,
+      "reason": "Very low pose coverage made posture inference unstable in the reviewed goldset clips."
+    },
+    {
+      "target": "coaching.candidate_thresholds.affect_issue_min",
+      "decision": "change",
+      "current": 35.0,
+      "recommended": 60.0,
+      "reason": "Affect corrections are currently firing from moderate low-affect scores alone. Raising this threshold makes facial-tone coaching rarer and better aligned with the teacher-feedback goal."
+    },
+    {
+      "target": "coaching.window_tags.positive_affect_low_max",
+      "decision": "change",
+      "current": 50.0,
+      "recommended": 40.0,
+      "reason": "Neutral-to-moderate affect should not automatically become a problem tag. Lowering the tag threshold helps stop weak facial-tone narratives from taking over the report."
+    },
+    {
+      "target": "coaching.window_tags.excessive_animation_risk_min",
+      "decision": "change",
+      "current": 50.0,
+      "recommended": 60.0,
+      "reason": "Several reviewed clips read as upright and stable even when motion-risk scores were only moderately elevated. This raises the bar before motion warnings dominate the teacher-facing narrative."
+    }
+  ],
+  "do_not_change_without_new_evidence": [
+    {
+      "target": "coaching.window_tags.closed_posture_risk_min",
+      "decision": "keep",
+      "current": 35.0,
+      "reason": "The closed-posture false positives look more like weak single-window promotion than a pure score-threshold problem. Fix the action gates first, then revisit this threshold if posture overcalling remains."
+    },
+    {
+      "target": "coaching.window_tags.audience_orientation_low_max",
+      "decision": "keep",
+      "current": 55.0,
+      "reason": "Audience-orientation coaching is still one of the more teacher-usable levers when it is well supported. It should stay available, but under the stronger multi-window and short-clip gates."
+    }
+  ],
+  "worker_handoff": {
+    "implementation_order": [
+      "Start from the actionability candidate prompt text.",
+      "Merge in the precision rules listed above before the field guidance and actionability-bias section.",
+      "Rewrite the summary and no-issue behavior so maintenance mode is allowed.",
+      "Add the threshold changes, especially the short-clip and multi-window action gates.",
+      "Keep raw metrics and pipeline notes out of teacher-facing prose."
+    ],
+    "acceptance_check": [
+      "A mostly stable short clip may legitimately return zero priority actions.",
+      "A top strength must name a repeatable behavior and cite a moment.",
+      "A priority action must read as a next-lecture experiment tied to visible evidence.",
+      "Affect coaching should be rare unless face evidence is strong and sustained."
+    ]
+  }
+}

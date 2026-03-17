@@ -1,7 +1,14 @@
 # Validation Tooling
 
-This directory contains the batch-validation workflow for `validation_manifest.csv`.
+This directory contains the batch-validation workflow for `reviewed_validation_manifest.csv`.
+That reviewed manifest is now the active default for all batch tooling in this directory. The original `validation_manifest.csv` stays in place and remains available through an explicit `--manifest` override.
 The tools keep downloaded media and generated runs under `evaluation/local_data/`, which is already ignored by the repo-level `.gitignore`.
+
+## Manifest Workflow
+
+- Default behavior: batch scripts use `evaluation/reviewed_validation_manifest.csv`.
+- Override behavior: pass `--manifest /workspace/TeacherEvaluation/evaluation/validation_manifest.csv` to target the original manifest, or any other manifest copy.
+- The reviewed manifest is the curated set documented in `reviewed_validation_notes.md`.
 
 ## Directory Layout
 
@@ -47,12 +54,10 @@ Extracts one 60-second clip per downloaded source video at 12 fps using OpenCV o
 python evaluation/run_validation_batch.py --goldset-only
 ```
 
-Runs the existing long evaluation pipeline over the extracted clips, then writes `batch_results.csv` and `batch_summary.md` in the batch output directory. You can filter the manifest with `--clip-ids`, `--priority-tiers`, `--goldset-only`, and `--limit`.
+Runs the existing long evaluation pipeline over the extracted clips, then writes `batch_results.csv` and `batch_summary.md` in the batch output directory. You can filter the manifest with `--clip-ids`, `--priority-tiers`, `--goldset-only`, and `--limit`. If you need the original manifest instead of the reviewed default, pass `--manifest /workspace/TeacherEvaluation/evaluation/validation_manifest.csv`.
 
 ## Expected Order
 
 1. Download videos.
 2. Extract validation clips.
 3. Run the long evaluation batch.
-
-Each script accepts `--manifest /workspace/TeacherEvaluation/evaluation/validation_manifest.csv` explicitly if you want to point at a different manifest copy.

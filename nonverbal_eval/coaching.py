@@ -51,6 +51,7 @@ class CoachingArtifacts:
 COACHING_PROMPT = str(_COACHING_CONFIG["coaching_synthesis"]["prompt"])
 ACTION_TEMPLATES: dict[str, dict[str, str]] = _COACHING_CONFIG["action_templates"]
 STRENGTH_TEMPLATES: dict[str, dict[str, str]] = _COACHING_CONFIG["strength_templates"]
+REPORT_SHAPE_VERSION = "feedback_first_v1"
 
 
 def build_coaching_artifacts(run_dir: Path) -> CoachingArtifacts:
@@ -573,97 +574,358 @@ def _augment_tags_with_qwen(tags: list[str], qwen_window: dict[str, Any]) -> lis
     return _unique_strings(tags)
 
 
-def _draft_action_candidates(review_windows: list[dict[str, Any]], top_actions: int) -> list[dict[str, Any]]:
+def _report_shape_thresholds() -> dict[str, Any]:
+    return _BASE_THRESHOLDS["coaching"]["report_shape"]
+
+
+def _window_observation_rows(window_df: pd.DataFrame) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for row in window_df.to_dict(orient="records"):
+        pose_coverage = float(row["pose_coverage"])
+        face_coverage = float(row["face_coverage"])
+        hand_coverage = float(row["hand_coverage"])
+        rows.append(
+            {
+                **row,
+                "window_label": _window_label(float(row["window_start_sec"]), float(row["window_end_sec"])),
+                "quality_control": {
+                    "pose_coverage": pose_coverage,
+                    "face_coverage": face_coverage,
+                    "hand_coverage": hand_coverage,
+                    "confidence": _confidence_from_qc(face_coverage, hand_coverage, pose_coverage),
+                },
+            }
+        )
+    return rows
+
+
+def _candidate_confidence(confidence_labels: list[str], support_count: int) -> str:
+    labels = set(confidence_labels)
+    if support_count >= 2 and labels == {"high"}:
+        return "high"
+    if "low" in labels:
+        return "low" if support_count <= 1 else "medium"
+    if "high" in labels:
+        return "medium" if support_count <= 1 else "high"
+    return "medium" if labels else "low"
+
+
+def _action_signal_score(tag: str, row: dict[str, Any]) -> float:
+    if tag == "uneven_room_scan":
+        return max(0.0, 100.0 - float(row["eye_contact_distribution_score"]))
+    if tag == "low_audience_orientation":
+        return max(0.0, 100.0 - float(row["audience_orientation_score"]))
+    if tag == "closed_posture":
+        return max(100.0 - float(row["confidence_presence_score"]), float(row["closed_posture_risk"]))
+    if tag == "limited_movement":
+        return max(100.0 - float(row["natural_movement_score"]), float(row["static_behavior_risk"]))
+    if tag == "over_animated_delivery":
+        return float(row["excessive_animation_risk"])
+    if tag == "tense_or_neutral_affect":
+        return max(100.0 - float(row["positive_affect_score"]), float(row["tension_hostility_risk"]))
+    if tag == "reduced_alertness":
+        return max(0.0, 100.0 - float(row["alertness_score"]))
+    return 0.0
+
+
+def _strength_signal_score(tag: str, row: dict[str, Any]) -> float:
+    if tag == "distributed_room_engagement":
+        return float(row["eye_contact_distribution_score"])
+    if tag == "upright_confident_presence":
+        return min(float(row["confidence_presence_score"]), float(row["posture_stability_score"]))
+    if tag == "controlled_expressive_gestures":
+        return min(float(row["natural_movement_score"]), 100.0 - float(row["excessive_animation_risk"]))
+    if tag == "welcoming_affect":
+        return float(row["positive_affect_score"])
+    if tag == "alert_room_presence":
+        return float(row["alertness_score"])
+    return 0.0
+
+
+def _action_evidence_summary(tag: str, row: dict[str, Any]) -> str:
+    label = row["window_label"]
+    if tag == "note_reading":
+        return f"{label} repeatedly pulled attention down to notes instead of back to the room."
+    if tag == "uneven_room_scan":
+        return f"{label} stayed more fixed on one part of the room than on a left-center-right sweep."
+    if tag == "low_audience_orientation":
+        return f"{label} spent longer than needed turned away from the audience after checks."
+    if tag == "closed_posture":
+        return f"{label} showed a more guarded arm-and-shoulder position between teaching points."
+    if tag == "limited_movement":
+        return f"{label} stayed physically still through explanation beats that could carry more emphasis."
+    if tag == "over_animated_delivery":
+        return f"{label} had gesture peaks that looked larger than the teaching point required."
+    if tag == "tense_or_neutral_affect":
+        return f"{label} showed a flatter or tighter visible facial tone than the rest of the clip."
+    if tag == "reduced_alertness":
+        return f"{label} showed fewer quick room checks and a less visibly alert scan."
+    return f"{label} showed {tag.replace('_', ' ')}."
+
+
+def _strength_evidence_summary(tag: str, row: dict[str, Any]) -> str:
+    label = row["window_label"]
+    if tag == "distributed_room_engagement":
+        return f"{label} showed attention moving across more than one part of the room."
+    if tag == "upright_confident_presence":
+        return f"{label} held an upright, settled stance rather than a collapsed or guarded one."
+    if tag == "controlled_expressive_gestures":
+        return f"{label} used gestures with clear timing and no obvious motion spikes."
+    if tag == "welcoming_affect":
+        return f"{label} showed a more approachable visible facial tone."
+    if tag == "alert_room_presence":
+        return f"{label} kept the head and eyes visibly engaged with the room."
+    if tag == "open_palm_explaining":
+        return f"{label} included open-palm explanatory gestures that supported the explanation."
+    return f"{label} showed {tag.replace('_', ' ')}."
+
+
+def _watch_monitor_hint(tag: str) -> str:
+    template = ACTION_TEMPLATES.get(tag, {})
+    return str(template.get("monitor") or template.get("try") or "Use the cited timestamps as a manual review point.")
+
+
+def _strength_repeat_hint(tag: str) -> str:
+    template = STRENGTH_TEMPLATES.get(tag, {})
+    return str(template.get("repeat") or "Keep this visible pattern available as a default during explanation.")
+
+
+def _qwen_action_score(window: dict[str, Any], tag: str) -> float:
+    aggregate = window.get("qwen", {}).get("aggregate", {})
+    if tag == "note_reading":
+        return 100.0 * max(
+            float(aggregate.get("notes_focus_ratio", 0.0)),
+            float(aggregate.get("reading_from_notes_ratio", 0.0)),
+        )
+    return 0.0
+
+
+def _qwen_strength_score(window: dict[str, Any], tag: str) -> float:
+    aggregate = window.get("qwen", {}).get("aggregate", {})
+    if tag == "open_palm_explaining":
+        return 100.0 * float(aggregate.get("open_palm_explaining_ratio", 0.0))
+    return 0.0
+
+
+def _classify_action_candidate(
+    *,
+    clip_duration_sec: float,
+    reliability_label: str,
+    support_count: int,
+    avg_severity: float,
+    max_severity: float,
+    confidence: str,
+) -> tuple[str, str]:
+    cfg = _report_shape_thresholds()
+    if reliability_label == "low":
+        return "watch", "Overall evidence quality is too limited for confident corrective feedback."
+    if clip_duration_sec < float(cfg["material_clip_min_sec"]):
+        return "watch", "The clip is brief, so the signal is better treated as a watch item than a correction."
+    if (
+        support_count >= int(cfg["material_support_window_min"])
+        and avg_severity >= float(cfg["material_avg_severity_min"])
+        and confidence != "low"
+    ):
+        return "corrective", "The signal repeated across multiple windows strongly enough to justify corrective feedback."
+    if (
+        clip_duration_sec >= float(cfg["single_window_material_clip_min_sec"])
+        and max_severity >= float(cfg["single_window_material_severity_min"])
+        and confidence == "high"
+    ):
+        return "corrective", "One well-supported window was strong enough to justify a targeted correction."
+    return "watch", "The signal is visible, but it is not yet sustained enough to justify real corrective feedback."
+
+
+def _draft_action_candidates(
+    window_df: pd.DataFrame,
+    review_windows: list[dict[str, Any]],
+    clip_duration_sec: float,
+    reliability_label: str,
+) -> list[dict[str, Any]]:
     grouped: dict[str, dict[str, Any]] = {}
-    for window in review_windows:
-        if window["kind"] == "strength":
-            continue
-        tag = _primary_tag(window["evidence_tags"], "action")
-        if tag not in ACTION_TEMPLATES:
-            continue
+    watch_threshold = float(_report_shape_thresholds()["watchlist_severity_min"])
+
+    def add_signal(
+        *,
+        tag: str,
+        timestamp: str,
+        severity: float,
+        confidence: str,
+        evidence_text: str,
+    ) -> None:
+        if tag not in ACTION_TEMPLATES or severity < watch_threshold:
+            return
         bucket = grouped.setdefault(
             tag,
             {
                 "tag": tag,
-                "priority": 0.0,
                 "timestamps": [],
-                "windows": [],
-                "confidence": "low",
-                "what_we_saw_parts": [],
+                "confidence_labels": [],
+                "evidence_parts": [],
+                "severities": [],
             },
         )
-        bucket["priority"] = max(float(bucket["priority"]), float(window["priority"]))
-        bucket["timestamps"].append(window["window_label"])
-        bucket["windows"].append(window["id"])
-        bucket["confidence"] = "high" if "high" in (bucket["confidence"], window["quality_control"]["confidence"]) else "medium"
-        bucket["what_we_saw_parts"].append(
-            f"{window['window_label']} showed {tag.replace('_', ' ')} with overall {window['metrics']['overall_score']:.1f}"
+        bucket["timestamps"].append(timestamp)
+        bucket["confidence_labels"].append(confidence)
+        bucket["evidence_parts"].append(evidence_text)
+        bucket["severities"].append(float(severity))
+
+    for row in _window_observation_rows(window_df):
+        for tag in _window_base_tags(row, "action"):
+            if tag not in ACTION_TEMPLATES:
+                continue
+            add_signal(
+                tag=tag,
+                timestamp=row["window_label"],
+                severity=_action_signal_score(tag, row),
+                confidence=row["quality_control"]["confidence"],
+                evidence_text=_action_evidence_summary(tag, row),
+            )
+
+    for window in review_windows:
+        if "note_reading" not in window.get("evidence_tags", []):
+            continue
+        add_signal(
+            tag="note_reading",
+            timestamp=window["window_label"],
+            severity=_qwen_action_score(window, "note_reading"),
+            confidence=window["quality_control"]["confidence"],
+            evidence_text=_action_evidence_summary("note_reading", {"window_label": window["window_label"]}),
         )
 
     action_candidates: list[dict[str, Any]] = []
     for tag, bucket in grouped.items():
+        timestamps = _unique_strings(bucket["timestamps"])
+        support_count = len(timestamps)
+        confidence = _candidate_confidence(bucket["confidence_labels"], support_count)
+        avg_severity = float(np.mean(bucket["severities"])) if bucket["severities"] else 0.0
+        max_severity = float(np.max(bucket["severities"])) if bucket["severities"] else 0.0
+        materiality, materiality_reason = _classify_action_candidate(
+            clip_duration_sec=clip_duration_sec,
+            reliability_label=reliability_label,
+            support_count=support_count,
+            avg_severity=avg_severity,
+            max_severity=max_severity,
+            confidence=confidence,
+        )
         template = ACTION_TEMPLATES[tag]
         action_candidates.append(
             {
                 "tag": tag,
                 "title": template["title"],
                 "why_it_matters": template["why"],
-                "what_we_saw": "; ".join(bucket["what_we_saw_parts"][:2]) + ".",
+                "what_we_saw": " ".join(bucket["evidence_parts"][:2]),
                 "what_to_try_next": template["try"],
-                "timestamps": _unique_strings(bucket["timestamps"]),
-                "confidence": bucket["confidence"],
-                "priority": float(bucket["priority"]),
+                "what_to_monitor_next": _watch_monitor_hint(tag),
+                "timestamps": timestamps,
+                "confidence": confidence,
+                "priority": max_severity + min(max(support_count - 1, 0) * 8.0, 16.0),
+                "support_count": support_count,
+                "avg_severity": avg_severity,
+                "max_severity": max_severity,
+                "materiality": materiality,
+                "materiality_reason": materiality_reason,
             }
         )
-    action_candidates.sort(key=lambda item: item["priority"], reverse=True)
-    return action_candidates[: max(top_actions, 1) + 2]
+    action_candidates.sort(
+        key=lambda item: (
+            item["materiality"] != "corrective",
+            -float(item["priority"]),
+            -int(item["support_count"]),
+        )
+    )
+    return action_candidates
 
 
-def _draft_strength_candidates(review_windows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _draft_strength_candidates(window_df: pd.DataFrame, review_windows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     grouped: dict[str, dict[str, Any]] = {}
-    for window in review_windows:
-        for tag in window["evidence_tags"]:
+    min_priority = float(_report_shape_thresholds()["strength_inventory_min_priority"])
+
+    def add_signal(
+        *,
+        tag: str,
+        timestamp: str,
+        priority: float,
+        confidence: str,
+        evidence_text: str,
+    ) -> None:
+        if tag not in STRENGTH_TEMPLATES or priority < min_priority:
+            return
+        bucket = grouped.setdefault(
+            tag,
+            {
+                "tag": tag,
+                "timestamps": [],
+                "confidence_labels": [],
+                "evidence_parts": [],
+                "priorities": [],
+            },
+        )
+        bucket["timestamps"].append(timestamp)
+        bucket["confidence_labels"].append(confidence)
+        bucket["evidence_parts"].append(evidence_text)
+        bucket["priorities"].append(float(priority))
+
+    for row in _window_observation_rows(window_df):
+        for tag in _window_base_tags(row, "strength"):
             if tag not in STRENGTH_TEMPLATES:
                 continue
-            bucket = grouped.setdefault(
-                tag,
-                {
-                    "tag": tag,
-                    "priority": 0.0,
-                    "timestamps": [],
-                    "confidence": "low",
-                },
+            add_signal(
+                tag=tag,
+                timestamp=row["window_label"],
+                priority=_strength_signal_score(tag, row),
+                confidence=row["quality_control"]["confidence"],
+                evidence_text=_strength_evidence_summary(tag, row),
             )
-            bucket["priority"] = max(float(bucket["priority"]), float(window["priority"]))
-            bucket["timestamps"].append(window["window_label"])
-            bucket["confidence"] = "high" if window["quality_control"]["confidence"] == "high" else "medium"
+
+    for window in review_windows:
+        if "open_palm_explaining" not in window.get("evidence_tags", []):
+            continue
+        add_signal(
+            tag="open_palm_explaining",
+            timestamp=window["window_label"],
+            priority=_qwen_strength_score(window, "open_palm_explaining"),
+            confidence=window["quality_control"]["confidence"],
+            evidence_text=_strength_evidence_summary("open_palm_explaining", {"window_label": window["window_label"]}),
+        )
 
     strengths: list[dict[str, Any]] = []
     for tag, bucket in grouped.items():
-        template = STRENGTH_TEMPLATES[tag]
+        timestamps = _unique_strings(bucket["timestamps"])
+        support_count = len(timestamps)
+        confidence = _candidate_confidence(bucket["confidence_labels"], support_count)
         strengths.append(
             {
                 "tag": tag,
-                "title": template["title"],
-                "evidence": template["evidence"],
-                "timestamps": _unique_strings(bucket["timestamps"]),
-                "confidence": bucket["confidence"],
-                "priority": float(bucket["priority"]),
+                "title": STRENGTH_TEMPLATES[tag]["title"],
+                "evidence": " ".join(bucket["evidence_parts"][:2]),
+                "what_to_repeat": _strength_repeat_hint(tag),
+                "timestamps": timestamps,
+                "confidence": confidence,
+                "priority": float(np.max(bucket["priorities"])) + min(max(support_count - 1, 0) * 6.0, 12.0),
+                "support_count": support_count,
             }
         )
-    strengths.sort(key=lambda item: item["priority"], reverse=True)
-    return strengths[:4]
+    strengths.sort(key=lambda item: (-float(item["priority"]), item["title"]))
+    return strengths
 
 
 def _moment_cards(review_windows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     cards: list[dict[str, Any]] = []
     for window in review_windows[:6]:
         metric_evidence = (
-            f"overall={window['metrics']['overall_score']:.1f}, "
-            f"eye={window['metrics']['eye_contact_distribution_score']:.1f}, "
-            f"presence={window['metrics']['confidence_presence_score']:.1f}, "
-            f"natural={window['metrics']['natural_movement_score']:.1f}"
+            f"Overall {window['metrics']['overall_score']:.1f}; "
+            f"room scan {window['metrics']['eye_contact_distribution_score']:.1f}; "
+            f"presence {window['metrics']['confidence_presence_score']:.1f}; "
+            f"natural movement {window['metrics']['natural_movement_score']:.1f}."
         )
+        if window["kind"] == "strength":
+            implication = _strength_repeat_hint(window["primary_tag"])
+        else:
+            implication = ACTION_TEMPLATES.get(window["primary_tag"], {}).get(
+                "try",
+                "Use this window as a manual review point before changing the delivery pattern.",
+            )
         cards.append(
             {
                 "id": window["id"],
@@ -672,16 +934,31 @@ def _moment_cards(review_windows: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "observed_behavior": " / ".join(tag.replace("_", " ") for tag in window["evidence_tags"][:3]) or "mixed evidence",
                 "metric_evidence": metric_evidence,
                 "qwen_interpretation": window["qwen"]["summary"],
-                "coaching_implication": ACTION_TEMPLATES.get(window["primary_tag"], {}).get(
-                    "try",
-                    "Preserve this delivery pattern and use it as a reference point in later lectures."
-                    if window["kind"] == "strength"
-                    else "Use this window as a manual review point before changing the delivery pattern.",
-                ),
+                "coaching_implication": implication,
                 "image_path": Path(window["display_frame_path"]).name,
             }
         )
     return cards
+
+
+def _no_material_reason(
+    action_candidates: list[dict[str, Any]],
+    *,
+    clip_duration_sec: float,
+    reliability_label: str,
+) -> str:
+    cfg = _report_shape_thresholds()
+    if reliability_label == "low":
+        return "Evidence quality is too limited to justify corrective feedback in this clip."
+    if clip_duration_sec < float(cfg["material_clip_min_sec"]):
+        return "This clip is short enough that the visible issues are better treated as watch items than as real corrective feedback."
+    if action_candidates:
+        top = action_candidates[0]
+        return (
+            f"The clearest watch item was {top['title'].lower()}, but it appeared in only {top['support_count']} "
+            f"window(s) and did not clear the corrective-feedback bar."
+        )
+    return "No sustained issue repeated strongly enough to justify a corrective action."
 
 
 def _build_evidence_payload(
@@ -692,14 +969,89 @@ def _build_evidence_payload(
     config: CoachingConfig,
 ) -> dict[str, Any]:
     reliability = _reliability_notes(summary)
-    action_candidates = _draft_action_candidates(review_windows, config.coach_top_actions)
-    strength_candidates = _draft_strength_candidates(review_windows)
+    action_candidates = _draft_action_candidates(
+        window_df=window_df,
+        review_windows=review_windows,
+        clip_duration_sec=float(summary["clip"]["duration_sec_actual"]),
+        reliability_label=reliability["label"],
+    )
+    strength_candidates = _draft_strength_candidates(window_df, review_windows)
+    cfg = _report_shape_thresholds()
+    corrective_actions = [item for item in action_candidates if item["materiality"] == "corrective"]
+    watchlist_candidates = [item for item in action_candidates if item["materiality"] != "corrective"]
+    top_strengths = [
+        item
+        for item in strength_candidates
+        if float(item["priority"]) >= float(cfg["top_strength_priority_min"])
+    ][: int(cfg["top_strength_limit"])]
+    strength_inventory = strength_candidates[: int(cfg["strength_inventory_limit"])]
+    priority_actions = corrective_actions[: max(config.coach_top_actions, 1)]
+    no_material_intervention_needed = not priority_actions
+    no_material_intervention_needed_reason = (
+        _no_material_reason(
+            watchlist_candidates,
+            clip_duration_sec=float(summary["clip"]["duration_sec_actual"]),
+            reliability_label=reliability["label"],
+        )
+        if no_material_intervention_needed
+        else ""
+    )
+    low_confidence_watchlist = [
+        {
+            "title": item["title"],
+            "why_watch": item["materiality_reason"],
+            "what_we_saw": item["what_we_saw"],
+            "what_to_monitor_next": item["what_to_monitor_next"],
+            "timestamps": item["timestamps"],
+            "confidence": item["confidence"],
+        }
+        for item in watchlist_candidates[: int(cfg["watchlist_limit"])]
+    ]
+    additional_observation_inventory: list[dict[str, Any]] = []
+    for item in corrective_actions[max(config.coach_top_actions, 1) :]:
+        additional_observation_inventory.append(
+            {
+                "kind": "action_opportunity",
+                "title": item["title"],
+                "evidence": item["what_we_saw"],
+                "suggested_response": item["what_to_try_next"],
+                "timestamps": item["timestamps"],
+                "confidence": item["confidence"],
+            }
+        )
+    top_strength_tags = {item["tag"] for item in top_strengths}
+    for item in strength_inventory:
+        if item["tag"] in top_strength_tags:
+            continue
+        additional_observation_inventory.append(
+            {
+                "kind": "strength_to_preserve",
+                "title": item["title"],
+                "evidence": item["evidence"],
+                "suggested_response": item["what_to_repeat"],
+                "timestamps": item["timestamps"],
+                "confidence": item["confidence"],
+            }
+        )
+    for item in low_confidence_watchlist:
+        additional_observation_inventory.append(
+            {
+                "kind": "watch_item",
+                "title": item["title"],
+                "evidence": item["what_we_saw"],
+                "suggested_response": item["what_to_monitor_next"],
+                "timestamps": item["timestamps"],
+                "confidence": item["confidence"],
+            }
+        )
+    additional_observation_inventory = additional_observation_inventory[: int(cfg["additional_observation_limit"])]
     priority_signals = [
         {
             "tag": item["tag"],
             "priority": item["priority"],
             "title": item["title"],
             "timestamps": item["timestamps"],
+            "materiality": item["materiality"],
         }
         for item in action_candidates
     ]
@@ -755,8 +1107,18 @@ def _build_evidence_payload(
             "window_count": sum(1 for window in review_windows if window["qwen"]["status"] == "completed"),
         },
         "quality_warnings": reliability["notes"],
-        "recommended_focus_areas": [item["tag"] for item in action_candidates[: config.coach_top_actions]],
+        "recommended_focus_areas": [item["tag"] for item in priority_actions]
+        or [item["tag"] for item in top_strengths[:2]]
+        or [item["title"] for item in low_confidence_watchlist[:2]],
+        "report_shape_version": REPORT_SHAPE_VERSION,
+        "no_material_intervention_needed": no_material_intervention_needed,
+        "no_material_intervention_needed_reason": no_material_intervention_needed_reason,
+        "draft_priority_actions": priority_actions,
         "draft_action_candidates": action_candidates,
+        "draft_strength_inventory": strength_inventory,
+        "draft_top_strengths": top_strengths,
+        "draft_low_confidence_watchlist": low_confidence_watchlist,
+        "draft_additional_observation_inventory": additional_observation_inventory,
         "draft_strength_candidates": strength_candidates,
         "moment_cards": _moment_cards(review_windows),
     }
@@ -782,14 +1144,25 @@ def _coerce_list_of_dicts(values: Any, fields: list[str], limit: int) -> list[di
     return out
 
 
+def _coerce_bool(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes"}
+    return bool(value)
+
+
 def _fallback_report(evidence: dict[str, Any], config: CoachingConfig) -> dict[str, Any]:
-    strengths = evidence["draft_strength_candidates"][:4]
-    actions = evidence["draft_action_candidates"][: max(config.coach_top_actions, 1)]
-    keep_doing = [f"Keep {item['title'].lower()} visible in future lectures." for item in strengths[:2]]
+    strengths = evidence["draft_top_strengths"]
+    strength_inventory = evidence["draft_strength_inventory"]
+    actions = evidence["draft_priority_actions"]
+    watchlist = evidence["draft_low_confidence_watchlist"]
+    additional_inventory = evidence["draft_additional_observation_inventory"]
+    keep_doing = [item["what_to_repeat"] for item in strengths[:2]]
     if not keep_doing:
         keep_doing = ["Keep using the moments that already look most stable and room-facing."]
 
-    watch_for = [f"Watch for {item['tag'].replace('_', ' ')} in the windows cited below." for item in actions[:2]]
+    watch_for = [f"Watch whether {item['title'].lower()} repeats beyond the cited window(s)." for item in watchlist[:2]]
     confidence_notes = evidence["quality_warnings"][:4]
     if not confidence_notes:
         confidence_notes = ["The evidence is sufficient for formative coaching, but still heuristic."]
@@ -800,21 +1173,37 @@ def _fallback_report(evidence: dict[str, Any], config: CoachingConfig) -> dict[s
     ]
     if actions:
         executive_parts.append(f"Highest-priority adjustment: {actions[0]['title'].lower()}.")
+    else:
+        executive_parts.append("No material intervention needed from this clip; use the watchlist and strengths as maintenance guidance.")
 
     report = {
         "source": {
             "mode": "template_fallback",
             "model": None,
         },
+        "report_shape_version": REPORT_SHAPE_VERSION,
         "executive_summary": " ".join(executive_parts),
+        "no_material_intervention_needed": bool(evidence["no_material_intervention_needed"]),
+        "no_material_intervention_needed_reason": evidence["no_material_intervention_needed_reason"],
         "top_strengths": [
             {
                 "title": item["title"],
                 "evidence": item["evidence"],
+                "what_to_repeat": item["what_to_repeat"],
                 "timestamps": item["timestamps"],
                 "confidence": item["confidence"],
             }
             for item in strengths
+        ],
+        "strength_inventory": [
+            {
+                "title": item["title"],
+                "evidence": item["evidence"],
+                "what_to_repeat": item["what_to_repeat"],
+                "timestamps": item["timestamps"],
+                "confidence": item["confidence"],
+            }
+            for item in strength_inventory
         ],
         "priority_actions": [
             {
@@ -827,6 +1216,8 @@ def _fallback_report(evidence: dict[str, Any], config: CoachingConfig) -> dict[s
             }
             for item in actions
         ],
+        "additional_observation_inventory": additional_inventory,
+        "low_confidence_watchlist": watchlist,
         "keep_doing": keep_doing,
         "watch_for": watch_for,
         "confidence_notes": confidence_notes,
@@ -875,7 +1266,10 @@ def _run_coach_llm(evidence: dict[str, Any], config: CoachingConfig, events_path
         return None
 
     prompt_payload = {
+        "report_shape_version": REPORT_SHAPE_VERSION,
         "overall_profile": evidence["overall_profile"],
+        "no_material_intervention_needed": evidence["no_material_intervention_needed"],
+        "no_material_intervention_needed_reason": evidence["no_material_intervention_needed_reason"],
         "priority_signals": evidence["priority_signals"],
         "strength_signals": evidence["strength_signals"],
         "review_windows": [
@@ -893,7 +1287,12 @@ def _run_coach_llm(evidence: dict[str, Any], config: CoachingConfig, events_path
             }
             for row in evidence["review_windows"]
         ],
+        "draft_priority_actions": evidence["draft_priority_actions"],
         "draft_action_candidates": evidence["draft_action_candidates"],
+        "draft_top_strengths": evidence["draft_top_strengths"],
+        "draft_strength_inventory": evidence["draft_strength_inventory"],
+        "draft_low_confidence_watchlist": evidence["draft_low_confidence_watchlist"],
+        "draft_additional_observation_inventory": evidence["draft_additional_observation_inventory"],
         "draft_strength_candidates": evidence["draft_strength_candidates"],
         "quality_warnings": evidence["quality_warnings"],
         "moment_cards": evidence["moment_cards"],
@@ -938,12 +1337,34 @@ def _run_coach_llm(evidence: dict[str, Any], config: CoachingConfig, events_path
             "mode": "llm",
             "model": config.coach_model,
         },
+        "report_shape_version": REPORT_SHAPE_VERSION,
         "executive_summary": str(parsed.get("executive_summary", "")).strip(),
-        "top_strengths": _coerce_list_of_dicts(parsed.get("top_strengths"), ["title", "evidence", "timestamps", "confidence"], 4),
+        "no_material_intervention_needed": _coerce_bool(parsed.get("no_material_intervention_needed")),
+        "no_material_intervention_needed_reason": str(parsed.get("no_material_intervention_needed_reason", "")).strip(),
+        "top_strengths": _coerce_list_of_dicts(
+            parsed.get("top_strengths"),
+            ["title", "evidence", "what_to_repeat", "timestamps", "confidence"],
+            int(_report_shape_thresholds()["top_strength_limit"]),
+        ),
+        "strength_inventory": _coerce_list_of_dicts(
+            parsed.get("strength_inventory"),
+            ["title", "evidence", "what_to_repeat", "timestamps", "confidence"],
+            int(_report_shape_thresholds()["strength_inventory_limit"]),
+        ),
         "priority_actions": _coerce_list_of_dicts(
             parsed.get("priority_actions"),
             ["title", "why_it_matters", "what_we_saw", "what_to_try_next", "timestamps", "confidence"],
             max(config.coach_top_actions, 1),
+        ),
+        "additional_observation_inventory": _coerce_list_of_dicts(
+            parsed.get("additional_observation_inventory"),
+            ["kind", "title", "evidence", "suggested_response", "timestamps", "confidence"],
+            int(_report_shape_thresholds()["additional_observation_limit"]),
+        ),
+        "low_confidence_watchlist": _coerce_list_of_dicts(
+            parsed.get("low_confidence_watchlist"),
+            ["title", "why_watch", "what_we_saw", "what_to_monitor_next", "timestamps", "confidence"],
+            int(_report_shape_thresholds()["watchlist_limit"]),
         ),
         "keep_doing": _coerce_list_of_strings(parsed.get("keep_doing"), 4),
         "watch_for": _coerce_list_of_strings(parsed.get("watch_for"), 4),
@@ -954,7 +1375,13 @@ def _run_coach_llm(evidence: dict[str, Any], config: CoachingConfig, events_path
             6,
         ),
     }
-    if not report["executive_summary"] or not report["priority_actions"]:
+    if not report["executive_summary"]:
+        log_event(events_path, "coaching_llm_invalid_output", model=config.coach_model)
+        return None
+    if report["no_material_intervention_needed"] and not report["no_material_intervention_needed_reason"]:
+        log_event(events_path, "coaching_llm_invalid_output", model=config.coach_model)
+        return None
+    if not report["no_material_intervention_needed"] and not report["priority_actions"]:
         log_event(events_path, "coaching_llm_invalid_output", model=config.coach_model)
         return None
     log_event(events_path, "coaching_llm_completed", model=config.coach_model, action_count=len(report["priority_actions"]))
@@ -979,6 +1406,7 @@ def _render_markdown(report: dict[str, Any], evidence: dict[str, Any], artifacts
         f"- Analyzed duration: `{evidence['run_context']['duration_sec_actual']:.2f}s`",
         f"- Window count: `{evidence['run_context']['window_count']}`",
         f"- Report mode: `{report['source']['mode']}`",
+        f"- Report shape: `{report.get('report_shape_version', REPORT_SHAPE_VERSION)}`",
         "",
         "## At a Glance",
         "",
@@ -990,31 +1418,101 @@ def _render_markdown(report: dict[str, Any], evidence: dict[str, Any], artifacts
         "",
     ]
 
-    for index, action in enumerate(report["priority_actions"][:3], start=1):
-        timestamps = action.get("timestamps", [])
-        if isinstance(timestamps, str):
-            timestamps = [timestamps]
+    if report.get("no_material_intervention_needed"):
         lines.extend(
             [
-                f"### {index}. {action['title']}",
-                "",
-                f"- Why it matters: {action['why_it_matters']}",
-                f"- What we saw: {action['what_we_saw']}",
-                f"- What to try next: {action['what_to_try_next']}",
-                f"- Review at: {', '.join(timestamps)}",
-                f"- Confidence: {action['confidence']}",
+                "- No material intervention needed from this clip.",
+                f"- Why: {report.get('no_material_intervention_needed_reason', 'The evidence did not justify a corrective action.')}",
                 "",
             ]
         )
+    else:
+        for index, action in enumerate(report["priority_actions"][:3], start=1):
+            timestamps = action.get("timestamps", [])
+            if isinstance(timestamps, str):
+                timestamps = [timestamps]
+            lines.extend(
+                [
+                    f"### {index}. {action['title']}",
+                    "",
+                    f"- Why it matters: {action['why_it_matters']}",
+                    f"- What we saw: {action['what_we_saw']}",
+                    f"- What to try next: {action['what_to_try_next']}",
+                    f"- Review at: {', '.join(timestamps)}",
+                    f"- Confidence: {action['confidence']}",
+                    "",
+                ]
+            )
+        if not report["priority_actions"]:
+            lines.append("- No priority actions were generated for this run.")
 
     lines.extend(["## Strengths to Preserve", ""])
     for item in report["top_strengths"]:
         timestamps = item.get("timestamps", [])
         if isinstance(timestamps, str):
             timestamps = [timestamps]
-        lines.append(f"- **{item['title']}**: {item['evidence']} Review at {', '.join(timestamps)}. Confidence: {item['confidence']}.")
+        lines.extend(
+            [
+                f"### {item['title']}",
+                "",
+                f"- Evidence: {item['evidence']}",
+                f"- What to repeat: {item.get('what_to_repeat', 'Keep this visible pattern available as a default during explanation.')}",
+                f"- Review at: {', '.join(timestamps)}",
+                f"- Confidence: {item['confidence']}",
+                "",
+            ]
+        )
     if not report["top_strengths"]:
         lines.append("- No single strength clearly dominated the clip; use the cited windows as manual review anchors.")
+
+    extra_strengths = report.get("strength_inventory", [])[len(report.get("top_strengths", [])) :]
+    if extra_strengths:
+        lines.extend(["", "## Strength Inventory", ""])
+        for item in extra_strengths:
+            timestamps = item.get("timestamps", [])
+            if isinstance(timestamps, str):
+                timestamps = [timestamps]
+            lines.append(
+                f"- **{item['title']}**: {item['evidence']} Repeat by {item.get('what_to_repeat', 'keeping the same visible pattern available')}"
+                f" Review at {', '.join(timestamps)}. Confidence: {item['confidence']}."
+            )
+
+    if report.get("additional_observation_inventory"):
+        lines.extend(["", "## Additional Observation Inventory", ""])
+        for item in report["additional_observation_inventory"]:
+            timestamps = item.get("timestamps", [])
+            if isinstance(timestamps, str):
+                timestamps = [timestamps]
+            lines.extend(
+                [
+                    f"### {item['title']} ({str(item.get('kind', 'observation')).replace('_', ' ')})",
+                    "",
+                    f"- Evidence: {item['evidence']}",
+                    f"- Suggested response: {item['suggested_response']}",
+                    f"- Review at: {', '.join(timestamps)}",
+                    f"- Confidence: {item['confidence']}",
+                    "",
+                ]
+            )
+
+    if report.get("low_confidence_watchlist"):
+        lines.extend(["## Low-Confidence Watchlist", ""])
+        for item in report["low_confidence_watchlist"]:
+            timestamps = item.get("timestamps", [])
+            if isinstance(timestamps, str):
+                timestamps = [timestamps]
+            lines.extend(
+                [
+                    f"### {item['title']}",
+                    "",
+                    f"- Why it stays on the watchlist: {item['why_watch']}",
+                    f"- What we saw: {item['what_we_saw']}",
+                    f"- What to monitor next: {item['what_to_monitor_next']}",
+                    f"- Review at: {', '.join(timestamps)}",
+                    f"- Confidence: {item['confidence']}",
+                    "",
+                ]
+            )
 
     lines.extend(["", "## Moment-by-Moment Evidence", ""])
     moment_lookup = {card["timestamp"]: card for card in evidence["moment_cards"]}

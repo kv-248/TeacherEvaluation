@@ -12,7 +12,7 @@ CONFIG_DIR = REPO_ROOT / "configs"
 
 
 DEFAULT_BASE_THRESHOLDS: dict[str, Any] = {
-    "version": "0.2.0",
+    "version": "0.3.0",
     "quality_control": {
         "pose_stable_min": 0.95,
         "face_stable_min": 0.95,
@@ -103,6 +103,20 @@ DEFAULT_BASE_THRESHOLDS: dict[str, Any] = {
             "strength_positive_affect_min": 55.0,
             "strength_alertness_min": 75.0,
         },
+        "report_shape": {
+            "material_clip_min_sec": 20.0,
+            "material_support_window_min": 2,
+            "material_avg_severity_min": 42.0,
+            "single_window_material_clip_min_sec": 45.0,
+            "single_window_material_severity_min": 72.0,
+            "watchlist_severity_min": 30.0,
+            "top_strength_priority_min": 72.0,
+            "strength_inventory_min_priority": 60.0,
+            "top_strength_limit": 4,
+            "strength_inventory_limit": 6,
+            "watchlist_limit": 4,
+            "additional_observation_limit": 10,
+        },
     },
 }
 
@@ -130,25 +144,34 @@ DEFAULT_QWEN_PROMPTS: dict[str, Any] = {
 
 
 DEFAULT_COACHING_PROMPTS: dict[str, Any] = {
-    "version": "0.2.0",
+    "version": "0.3.0",
     "coaching_synthesis": {
         "model": "Qwen/Qwen2.5-3B-Instruct",
         "fallback": "template",
         "prompt": (
             "You are a teacher coach writing concise, practical feedback from structured nonverbal evidence.\n"
             "Return JSON only with exactly these top-level keys:\n"
+            "- report_shape_version: string\n"
             "- executive_summary: string, max 85 words\n"
-            "- top_strengths: array of objects with keys [title, evidence, timestamps, confidence]\n"
+            "- no_material_intervention_needed: boolean\n"
+            "- no_material_intervention_needed_reason: string\n"
+            "- top_strengths: array of objects with keys [title, evidence, what_to_repeat, timestamps, confidence]\n"
+            "- strength_inventory: array of objects with keys [title, evidence, what_to_repeat, timestamps, confidence]\n"
             "- priority_actions: array of objects with keys [title, why_it_matters, what_we_saw, what_to_try_next, timestamps, confidence]\n"
+            "- additional_observation_inventory: array of objects with keys [kind, title, evidence, suggested_response, timestamps, confidence]\n"
+            "- low_confidence_watchlist: array of objects with keys [title, why_watch, what_we_saw, what_to_monitor_next, timestamps, confidence]\n"
             "- keep_doing: array of short strings\n"
             "- watch_for: array of short strings\n"
             "- confidence_notes: array of short strings\n"
             "- evidence_moments: array of objects with keys [timestamp, headline, observed_behavior, metric_evidence, qwen_interpretation, coaching_implication]\n\n"
             "Requirements:\n"
             "- Use only the evidence provided by the user message.\n"
-            "- Every priority action must cite one or more timestamps already present in the evidence.\n"
+            "- Every priority action, strength, inventory item, and watch item must cite one or more timestamps already present in the evidence.\n"
             "- Keep the tone direct, respectful, coach-like, and actionable.\n"
             "- Do not assign global teacher-quality labels.\n"
+            "- If the evidence does not justify real corrective feedback, set no_material_intervention_needed=true, leave priority_actions empty, explain why, and move the weaker items into low_confidence_watchlist or strength_inventory.\n"
+            "- Make strengths concrete and repeatable; do not use abstract titles without a visible behavior and a cited moment.\n"
+            "- Use additional_observation_inventory to list important observations not already surfaced in priority_actions.\n"
             "- If the evidence is weak, say so in confidence_notes instead of inventing certainty.\n"
             "- Prefer concrete next-lecture experiments over generic advice.\n"
             "Do not add markdown or explanation outside the JSON object."
@@ -159,67 +182,81 @@ DEFAULT_COACHING_PROMPTS: dict[str, Any] = {
             "title": "Reduce extended note-reading",
             "why": "Frequent downward checks can weaken room connection and make delivery feel less direct.",
             "try": "Raise notes closer to eye level and rehearse short glance-return cycles during key explanations.",
+            "monitor": "Check whether note glances stay brief and return to the room within the same teaching beat.",
         },
         "uneven_room_scan": {
             "title": "Deliberately sweep the room",
             "why": "More even attention across the room helps students feel included and keeps engagement distributed.",
             "try": "At each major point, pause and sweep left-center-right before moving on.",
+            "monitor": "Check whether the next explanation visibly reaches more than one side of the room.",
         },
         "low_audience_orientation": {
             "title": "Turn back toward the audience sooner",
             "why": "Audience-facing body orientation supports perceived connection and makes eye-contact cues more visible.",
             "try": "After each board or note check, reset your shoulders and chin back toward the room.",
+            "monitor": "Check whether board or note checks end with a quick shoulder-and-chin reset back to the room.",
         },
         "closed_posture": {
             "title": "Open the stance between points",
             "why": "A more open posture tends to read as more confident and easier to approach.",
             "try": "Let the elbows open slightly and release any folded or guarded arm positions between points.",
+            "monitor": "Check whether transitions keep the elbows and shoulders open instead of folding inward.",
         },
         "limited_movement": {
             "title": "Add more purposeful gesture emphasis",
             "why": "Too little movement can flatten emphasis and make key ideas feel less animated.",
             "try": "Choose one or two moments per minute where you deliberately use an open explanatory gesture.",
+            "monitor": "Check whether key explanation beats now have one visible gesture cue instead of a static stance.",
         },
         "over_animated_delivery": {
             "title": "Tighten the peak size of gestures",
             "why": "Large bursts of motion can distract from the teaching point when they are not tightly timed.",
             "try": "Keep big gestures for true emphasis and use smaller controlled hand movements elsewhere.",
+            "monitor": "Check whether gesture size matches the importance of the point instead of peaking on routine lines.",
         },
         "tense_or_neutral_affect": {
             "title": "Soften the visible facial tone",
             "why": "A more relaxed facial tone can make explanations feel warmer and less guarded.",
             "try": "Reset the face between sentences and let the expression relax before the next point.",
+            "monitor": "Check whether the face resets between points instead of staying tight through the whole sentence.",
         },
         "reduced_alertness": {
             "title": "Increase room-checking behavior",
             "why": "Alert room-facing behavior helps the lecture feel more responsive and attentive.",
             "try": "Build in quick audience checks after transitions instead of staying fixed on notes or a single spot.",
+            "monitor": "Check whether transitions now include a visible room check before the next explanation.",
         },
     },
     "strength_templates": {
         "distributed_room_engagement": {
             "title": "Distributed room engagement",
             "evidence": "Head and gaze behavior are spread across more than one audience sector.",
+            "repeat": "Reuse the left-center-right room sweep that already looks natural.",
         },
         "upright_confident_presence": {
             "title": "Upright confident presence",
             "evidence": "Posture and stance read as stable and open rather than collapsed or closed off.",
+            "repeat": "Keep the same upright, settled stance between points and transitions.",
         },
         "controlled_expressive_gestures": {
             "title": "Controlled expressive gestures",
             "evidence": "Gesture activity looks intentional and explanatory without strong over-animation flags.",
+            "repeat": "Keep using the same measured gesture size on explanation beats.",
         },
         "welcoming_affect": {
             "title": "Welcoming visible tone",
             "evidence": "Facial-affect proxies suggest a more approachable or positive delivery tone.",
+            "repeat": "Keep the same relaxed facial reset that reads approachable on camera.",
         },
         "alert_room_presence": {
             "title": "Alert room presence",
             "evidence": "Visible eye-open and room-facing cues suggest alert, attentive delivery.",
+            "repeat": "Keep the same quick room checks that make the lecture feel attentive.",
         },
         "open_palm_explaining": {
             "title": "Open-palm explanatory delivery",
             "evidence": "Semantic review repeatedly identified open-palm explaining rather than closed or static action.",
+            "repeat": "Keep the same open-palm gesture shape when emphasizing key ideas.",
         },
     },
 }

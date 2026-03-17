@@ -1,0 +1,90 @@
+{
+  "source": {
+    "mode": "template_fallback",
+    "model": null
+  },
+  "report_shape_version": 2,
+  "executive_summary": "Delivery generally reads as upright and physically settled; room engagement appears reasonably distributed. Best visible window: 02:00-02:05. No material intervention needed from this clip; use the watchlist and strengths as maintenance guidance.",
+  "no_material_intervention_needed": true,
+  "no_material_intervention_needed_reason": "This clip is short enough that the visible issues are better treated as watch items than as real corrective feedback.",
+  "top_strengths": [
+    {
+      "title": "Alert room presence",
+      "evidence": "02:00-02:05 kept the head and eyes visibly engaged with the room.",
+      "what_to_repeat": "Keep the same quick room checks that make the lecture feel attentive.",
+      "timestamps": ["02:00-02:05"],
+      "confidence": "medium"
+    },
+    {
+      "title": "Upright settled stance",
+      "evidence": "The body stayed broadly centered and upright during the clearest window.",
+      "what_to_repeat": "Preserve this neutral stance before and after transitions.",
+      "timestamps": ["02:00-02:05"],
+      "confidence": "medium"
+    }
+  ],
+  "strength_inventory": [
+    {
+      "title": "Alert room presence",
+      "evidence": "02:00-02:05 kept the head and eyes visibly engaged with the room.",
+      "what_to_repeat": "Keep the same quick room checks that make the lecture feel attentive.",
+      "timestamps": ["02:00-02:05"],
+      "confidence": "medium"
+    },
+    {
+      "title": "Upright settled stance",
+      "evidence": "The body stayed broadly centered and upright during the clearest window.",
+      "what_to_repeat": "Preserve this neutral stance before and after transitions.",
+      "timestamps": ["02:00-02:05"],
+      "confidence": "medium"
+    },
+    {
+      "title": "Stable speaking rhythm",
+      "evidence": "The clip did not show strong spikes in visible movement during the review window.",
+      "what_to_repeat": "Keep using the same paced delivery when the room is already settled.",
+      "timestamps": ["02:00-02:05"],
+      "confidence": "low"
+    }
+  ],
+  "priority_actions": [],
+  "additional_observation_inventory": [
+    {
+      "kind": "watch_item",
+      "title": "Soften the visible facial tone",
+      "evidence": "02:00-02:05 showed a flatter or tighter visible facial tone than the rest of the clip.",
+      "suggested_response": "Check whether the face resets between points instead of staying tight through the whole sentence.",
+      "timestamps": ["02:00-02:05"],
+      "confidence": "medium"
+    }
+  ],
+  "low_confidence_watchlist": [
+    {
+      "title": "Soften the visible facial tone",
+      "why_watch": "The clip is brief, so the signal is better treated as a watch item than a correction.",
+      "what_we_saw": "02:00-02:05 showed a flatter or tighter visible facial tone than the rest of the clip.",
+      "what_to_monitor_next": "Check whether the face resets between points instead of staying tight through the whole sentence.",
+      "timestamps": ["02:00-02:05"],
+      "confidence": "medium"
+    }
+  ],
+  "keep_doing": [
+    "Keep the same quick room checks that make the lecture feel attentive.",
+    "Preserve this neutral stance before and after transitions."
+  ],
+  "watch_for": [
+    "Watch whether the facial tone relaxes on the next clip."
+  ],
+  "confidence_notes": [
+    "The evidence is sufficient for formative coaching, but still heuristic."
+  ],
+  "evidence_moments": [
+    {
+      "timestamp": "02:00-02:05",
+      "headline": "Best visible window",
+      "observed_behavior": "The teacher stayed upright and regularly re-engaged the room.",
+      "metric_evidence": "Higher presence and steadier movement scores than surrounding windows.",
+      "qwen_interpretation": "This looks like a stable teaching segment that is more suitable for maintenance than correction.",
+      "coaching_implication": "Preserve the room-check rhythm and use this window as the baseline to repeat."
+    }
+  ]
+}

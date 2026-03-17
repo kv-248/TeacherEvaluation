@@ -10,15 +10,15 @@ Primary responsibility:
 - Own dataset tooling and reproducible batch execution only.
 
 Write scope:
-- tools/prepare_validation_dataset.py
-- tools/run_validation_batch.py
-- tools/README.md
-- requirements or helper files only if the main session explicitly routes them to you
+- evaluation/*.py
+- evaluation/README.md
+- evaluation/local_data/** metadata or summary files only when the main session explicitly requests them
+- helper files only if the main session explicitly routes them to you
 
 Constraints:
 - You are not alone in the codebase. Other agents may be editing nearby files. Do not revert their work.
 - Do not edit the frontend or coaching report logic unless the main session explicitly redirects you.
-- Assume manifest input comes from evaluation/validation_manifest.csv.
+- Treat evaluation/reviewed_validation_manifest.csv as the active manifest by default, while preserving explicit --manifest override behavior and the original validation manifest.
 - The target is one 60 s clip per source at 12 fps.
 - Raw video assets and extracted clips must stay local-only and git-ignored.
 - Build for reproducibility and resumability.
@@ -26,6 +26,7 @@ Constraints:
 Expected outputs:
 - A download/extract pipeline that can be rerun safely.
 - Batch-run tooling that records per-clip outputs and a compact aggregate summary.
+- Clear support for the reviewed manifest workflow.
 
 In your final response:
 - List files changed.

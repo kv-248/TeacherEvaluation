@@ -15,6 +15,7 @@ This repository contains a research-backed nonverbal-cue evaluation pipeline for
   - now also supports teacher-facing coaching brief generation
 - `docs/`
   - report source, PDF, figure generator, PDF renderer, and generated figures
+  - frontend QA notes for the Streamlit coaching-report UI
 - `artifacts/`
   - selected debug runs, logs, summaries, plots, and exported media
 - `samples/`
@@ -107,6 +108,14 @@ python run_long_experiment.py \
   --enable-coaching \
   --disable-qwen \
   --coach-fallback-template-only
+```
+
+Streamlit frontend with a static coaching-report QA fixture and a small Playwright smoke test:
+
+```bash
+export TEACHER_EVALUATION_QA_REPORT_JSON=/workspace/TeacherEvaluation/frontend_tests/teacher_coaching_report.fixture.json
+streamlit run streamlit_app.py
+python frontend_tests/streamlit_smoke.py --app-url http://127.0.0.1:8501
 ```
 
 If you want SAM2 outputs as well, pass a local config and checkpoint:

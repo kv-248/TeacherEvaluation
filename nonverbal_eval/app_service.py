@@ -530,6 +530,7 @@ def run_teacher_evaluation(
         metadata["artifacts"]["semantic"] = semantic_payload["artifacts"]
     if coaching_payload is not None:
         metadata["coaching_report"] = coaching_payload["report"]
+        metadata["coaching_report_shape_version"] = coaching_payload["report"].get("report_shape_version")
         metadata["artifacts"]["coaching"] = coaching_payload["artifacts"]
     run_meta_json.write_text(json.dumps(metadata, indent=2), encoding="utf-8")
 

@@ -1,5 +1,5 @@
-version = "0.2.0"
-purpose = "Teacher-facing coaching synthesis prompt plus fallback action and strength templates."
+version = "0.3.0"
+purpose = "Teacher-facing coaching synthesis prompt plus feedback-first fallback action and strength templates."
 
 [coaching_synthesis]
 model = "Qwen/Qwen2.5-3B-Instruct"
@@ -8,9 +8,15 @@ fallback = "template"
 prompt = """
 You are a teacher coach writing concise, practical feedback from structured nonverbal evidence.
 Return JSON only with exactly these top-level keys:
+- report_shape_version: string
 - executive_summary: string, max 85 words
-- top_strengths: array of objects with keys [title, evidence, timestamps, confidence]
+- no_material_intervention_needed: boolean
+- no_material_intervention_needed_reason: string
+- top_strengths: array of objects with keys [title, evidence, what_to_repeat, timestamps, confidence]
+- strength_inventory: array of objects with keys [title, evidence, what_to_repeat, timestamps, confidence]
 - priority_actions: array of objects with keys [title, why_it_matters, what_we_saw, what_to_try_next, timestamps, confidence]
+- additional_observation_inventory: array of objects with keys [kind, title, evidence, suggested_response, timestamps, confidence]
+- low_confidence_watchlist: array of objects with keys [title, why_watch, what_we_saw, what_to_monitor_next, timestamps, confidence]
 - keep_doing: array of short strings
 - watch_for: array of short strings
 - confidence_notes: array of short strings
@@ -18,9 +24,12 @@ Return JSON only with exactly these top-level keys:
 
 Requirements:
 - Use only the evidence provided by the user message.
-- Every priority action must cite one or more timestamps already present in the evidence.
+- Every priority action, strength, inventory item, and watch item must cite one or more timestamps already present in the evidence.
 - Keep the tone direct, respectful, coach-like, and actionable.
 - Do not assign global teacher-quality labels.
+- If the evidence does not justify real corrective feedback, set no_material_intervention_needed=true, leave priority_actions empty, explain why, and move the weaker items into low_confidence_watchlist or strength_inventory.
+- Make strengths concrete and repeatable; do not use abstract titles without a visible behavior and a cited moment.
+- Use additional_observation_inventory to list important observations not already surfaced in priority_actions.
 - If the evidence is weak, say so in confidence_notes instead of inventing certainty.
 - Prefer concrete next-lecture experiments over generic advice.
 Do not add markdown or explanation outside the JSON object.
@@ -28,9 +37,15 @@ Do not add markdown or explanation outside the JSON object.
 
 [output_contract]
 required_fields = [
+  "report_shape_version",
   "executive_summary",
+  "no_material_intervention_needed",
+  "no_material_intervention_needed_reason",
   "top_strengths",
+  "strength_inventory",
   "priority_actions",
+  "additional_observation_inventory",
+  "low_confidence_watchlist",
   "keep_doing",
   "watch_for",
   "confidence_notes",
@@ -41,62 +56,76 @@ required_fields = [
 title = "Reduce extended note-reading"
 why = "Frequent downward checks can weaken room connection and make delivery feel less direct."
 try = "Raise notes closer to eye level and rehearse short glance-return cycles during key explanations."
+monitor = "Check whether note glances stay brief and return to the room within the same teaching beat."
 
 [action_templates.uneven_room_scan]
 title = "Deliberately sweep the room"
 why = "More even attention across the room helps students feel included and keeps engagement distributed."
 try = "At each major point, pause and sweep left-center-right before moving on."
+monitor = "Check whether the next explanation visibly reaches more than one side of the room."
 
 [action_templates.low_audience_orientation]
 title = "Turn back toward the audience sooner"
 why = "Audience-facing body orientation supports perceived connection and makes eye-contact cues more visible."
 try = "After each board or note check, reset your shoulders and chin back toward the room."
+monitor = "Check whether board or note checks end with a quick shoulder-and-chin reset back to the room."
 
 [action_templates.closed_posture]
 title = "Open the stance between points"
 why = "A more open posture tends to read as more confident and easier to approach."
 try = "Let the elbows open slightly and release any folded or guarded arm positions between points."
+monitor = "Check whether transitions keep the elbows and shoulders open instead of folding inward."
 
 [action_templates.limited_movement]
 title = "Add more purposeful gesture emphasis"
 why = "Too little movement can flatten emphasis and make key ideas feel less animated."
 try = "Choose one or two moments per minute where you deliberately use an open explanatory gesture."
+monitor = "Check whether key explanation beats now have one visible gesture cue instead of a static stance."
 
 [action_templates.over_animated_delivery]
 title = "Tighten the peak size of gestures"
 why = "Large bursts of motion can distract from the teaching point when they are not tightly timed."
 try = "Keep big gestures for true emphasis and use smaller controlled hand movements elsewhere."
+monitor = "Check whether gesture size matches the importance of the point instead of peaking on routine lines."
 
 [action_templates.tense_or_neutral_affect]
 title = "Soften the visible facial tone"
 why = "A more relaxed facial tone can make explanations feel warmer and less guarded."
 try = "Reset the face between sentences and let the expression relax before the next point."
+monitor = "Check whether the face resets between points instead of staying tight through the whole sentence."
 
 [action_templates.reduced_alertness]
 title = "Increase room-checking behavior"
 why = "Alert room-facing behavior helps the lecture feel more responsive and attentive."
 try = "Build in quick audience checks after transitions instead of staying fixed on notes or a single spot."
+monitor = "Check whether transitions now include a visible room check before the next explanation."
 
 [strength_templates.distributed_room_engagement]
 title = "Distributed room engagement"
 evidence = "Head and gaze behavior are spread across more than one audience sector."
+repeat = "Reuse the left-center-right room sweep that already looks natural."
 
 [strength_templates.upright_confident_presence]
 title = "Upright confident presence"
 evidence = "Posture and stance read as stable and open rather than collapsed or closed off."
+repeat = "Keep the same upright, settled stance between points and transitions."
 
 [strength_templates.controlled_expressive_gestures]
 title = "Controlled expressive gestures"
 evidence = "Gesture activity looks intentional and explanatory without strong over-animation flags."
+repeat = "Keep using the same measured gesture size on explanation beats."
 
 [strength_templates.welcoming_affect]
 title = "Welcoming visible tone"
 evidence = "Facial-affect proxies suggest a more approachable or positive delivery tone."
+repeat = "Keep the same relaxed facial reset that reads approachable on camera."
 
 [strength_templates.alert_room_presence]
 title = "Alert room presence"
 evidence = "Visible eye-open and room-facing cues suggest alert, attentive delivery."
+repeat = "Keep the same quick room checks that make the lecture feel attentive."
 
 [strength_templates.open_palm_explaining]
 title = "Open-palm explanatory delivery"
 evidence = "Semantic review repeatedly identified open-palm explaining rather than closed or static action."
+repeat = "Keep the same open-palm gesture shape when emphasizing key ideas."

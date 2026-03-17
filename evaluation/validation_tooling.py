@@ -16,7 +16,9 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-MANIFEST_PATH = REPO_ROOT / "evaluation" / "validation_manifest.csv"
+REVIEWED_MANIFEST_PATH = REPO_ROOT / "evaluation" / "reviewed_validation_manifest.csv"
+ORIGINAL_MANIFEST_PATH = REPO_ROOT / "evaluation" / "validation_manifest.csv"
+MANIFEST_PATH = REVIEWED_MANIFEST_PATH
 LOCAL_DATA_ROOT = REPO_ROOT / "evaluation" / "local_data"
 VIDEOS_ROOT = LOCAL_DATA_ROOT / "videos"
 CLIPS_ROOT = LOCAL_DATA_ROOT / "clips"
@@ -69,7 +71,12 @@ def _parse_csv_list(value: str | None) -> list[str] | None:
 
 
 def add_manifest_args(parser: Any) -> None:
-    parser.add_argument("--manifest", type=Path, default=MANIFEST_PATH, help="Path to validation_manifest.csv.")
+    parser.add_argument(
+        "--manifest",
+        type=Path,
+        default=MANIFEST_PATH,
+        help="Path to the active validation manifest. Defaults to reviewed_validation_manifest.csv.",
+    )
 
 
 def add_selection_args(parser: Any) -> None:

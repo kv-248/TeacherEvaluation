@@ -1,5 +1,5 @@
-version = "0.2.0"
-purpose = "Externalized interpretation thresholds, QC bands, and coaching-trigger thresholds."
+version = "0.3.0"
+purpose = "Externalized interpretation thresholds, QC bands, and coaching report-shape thresholds."
 
 [quality_control]
 pose_stable_min = 0.95
@@ -89,3 +89,17 @@ strength_natural_movement_min = 65.0
 strength_excessive_animation_max = 35.0
 strength_positive_affect_min = 55.0
 strength_alertness_min = 75.0
+
+[coaching.report_shape]
+material_clip_min_sec = 20.0
+material_support_window_min = 2
+material_avg_severity_min = 42.0
+single_window_material_clip_min_sec = 45.0
+single_window_material_severity_min = 72.0
+watchlist_severity_min = 30.0
+top_strength_priority_min = 72.0
+strength_inventory_min_priority = 60.0
+top_strength_limit = 4
+strength_inventory_limit = 6
+watchlist_limit = 4
+additional_observation_limit = 10
