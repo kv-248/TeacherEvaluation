@@ -12,25 +12,31 @@ import numpy as np
 import pandas as pd
 
 from .pipeline import log_event
+from .runtime_config import load_base_thresholds, load_coaching_prompt_config, load_qwen_prompt_config
 from .semantic import SemanticConfig, SemanticSample, _extract_frame_at, _extract_json_blob, _run_qwen
+
+
+_BASE_THRESHOLDS = load_base_thresholds()
+_QWEN_CONFIG = load_qwen_prompt_config()["frame_semantic_review"]
+_COACHING_CONFIG = load_coaching_prompt_config()
 
 
 @dataclass(slots=True)
 class CoachingConfig:
     enabled: bool = False
-    coach_model: str = "Qwen/Qwen2.5-3B-Instruct"
+    coach_model: str = str(_COACHING_CONFIG["coaching_synthesis"]["model"])
     coach_device: str = "cuda:1"
     coach_max_windows: int = 6
     coach_top_actions: int = 3
     coach_render_pdf: bool = True
     coach_fallback_template_only: bool = False
     qwen_enabled: bool = True
-    qwen_model: str = "Qwen/Qwen2.5-VL-7B-Instruct"
+    qwen_model: str = str(_QWEN_CONFIG["model"])
     qwen_device: str = "cuda:0"
     qwen_device_map: str | None = None
     qwen_dtype: str = "bfloat16"
-    qwen_max_new_tokens: int = 180
-    qwen_temperature: float = 0.1
+    qwen_max_new_tokens: int = int(_QWEN_CONFIG["max_new_tokens"])
+    qwen_temperature: float = float(_QWEN_CONFIG["temperature"])
 
 
 @dataclass(slots=True)
@@ -42,95 +48,9 @@ class CoachingArtifacts:
     moments_dir: Path
 
 
-COACHING_PROMPT = """You are a teacher coach writing concise, practical feedback from structured nonverbal evidence.
-Return JSON only with exactly these top-level keys:
-- executive_summary: string, max 85 words
-- top_strengths: array of objects with keys [title, evidence, timestamps, confidence]
-- priority_actions: array of objects with keys [title, why_it_matters, what_we_saw, what_to_try_next, timestamps, confidence]
-- keep_doing: array of short strings
-- watch_for: array of short strings
-- confidence_notes: array of short strings
-- evidence_moments: array of objects with keys [timestamp, headline, observed_behavior, metric_evidence, qwen_interpretation, coaching_implication]
-
-Requirements:
-- Use only the evidence provided by the user message.
-- Every priority action must cite one or more timestamps already present in the evidence.
-- Keep the tone direct, respectful, coach-like, and actionable.
-- Do not assign global teacher-quality labels.
-- If the evidence is weak, say so in confidence_notes instead of inventing certainty.
-- Prefer concrete next-lecture experiments over generic advice.
-Do not add markdown or explanation outside the JSON object."""
-
-
-ACTION_TEMPLATES: dict[str, dict[str, str]] = {
-    "note_reading": {
-        "title": "Reduce extended note-reading",
-        "why": "Frequent downward checks can weaken room connection and make delivery feel less direct.",
-        "try": "Raise notes closer to eye level and rehearse short glance-return cycles during key explanations.",
-    },
-    "uneven_room_scan": {
-        "title": "Deliberately sweep the room",
-        "why": "More even attention across the room helps students feel included and keeps engagement distributed.",
-        "try": "At each major point, pause and sweep left-center-right before moving on.",
-    },
-    "low_audience_orientation": {
-        "title": "Turn back toward the audience sooner",
-        "why": "Audience-facing body orientation supports perceived connection and makes eye-contact cues more visible.",
-        "try": "After each board or note check, reset your shoulders and chin back toward the room.",
-    },
-    "closed_posture": {
-        "title": "Open the stance between points",
-        "why": "A more open posture tends to read as more confident and easier to approach.",
-        "try": "Let the elbows open slightly and release any folded or guarded arm positions between points.",
-    },
-    "limited_movement": {
-        "title": "Add more purposeful gesture emphasis",
-        "why": "Too little movement can flatten emphasis and make key ideas feel less animated.",
-        "try": "Choose one or two moments per minute where you deliberately use an open explanatory gesture.",
-    },
-    "over_animated_delivery": {
-        "title": "Tighten the peak size of gestures",
-        "why": "Large bursts of motion can distract from the teaching point when they are not tightly timed.",
-        "try": "Keep big gestures for true emphasis and use smaller controlled hand movements elsewhere.",
-    },
-    "tense_or_neutral_affect": {
-        "title": "Soften the visible facial tone",
-        "why": "A more relaxed facial tone can make explanations feel warmer and less guarded.",
-        "try": "Reset the face between sentences and let the expression relax before the next point.",
-    },
-    "reduced_alertness": {
-        "title": "Increase room-checking behavior",
-        "why": "Alert room-facing behavior helps the lecture feel more responsive and attentive.",
-        "try": "Build in quick audience checks after transitions instead of staying fixed on notes or a single spot.",
-    },
-}
-
-STRENGTH_TEMPLATES: dict[str, dict[str, str]] = {
-    "distributed_room_engagement": {
-        "title": "Distributed room engagement",
-        "evidence": "Head and gaze behavior are spread across more than one audience sector.",
-    },
-    "upright_confident_presence": {
-        "title": "Upright confident presence",
-        "evidence": "Posture and stance read as stable and open rather than collapsed or closed off.",
-    },
-    "controlled_expressive_gestures": {
-        "title": "Controlled expressive gestures",
-        "evidence": "Gesture activity looks intentional and explanatory without strong over-animation flags.",
-    },
-    "welcoming_affect": {
-        "title": "Welcoming visible tone",
-        "evidence": "Facial-affect proxies suggest a more approachable or positive delivery tone.",
-    },
-    "alert_room_presence": {
-        "title": "Alert room presence",
-        "evidence": "Visible eye-open and room-facing cues suggest alert, attentive delivery.",
-    },
-    "open_palm_explaining": {
-        "title": "Open-palm explanatory delivery",
-        "evidence": "Semantic review repeatedly identified open-palm explaining rather than closed or static action.",
-    },
-}
+COACHING_PROMPT = str(_COACHING_CONFIG["coaching_synthesis"]["prompt"])
+ACTION_TEMPLATES: dict[str, dict[str, str]] = _COACHING_CONFIG["action_templates"]
+STRENGTH_TEMPLATES: dict[str, dict[str, str]] = _COACHING_CONFIG["strength_templates"]
 
 
 def build_coaching_artifacts(run_dir: Path) -> CoachingArtifacts:
@@ -156,9 +76,14 @@ def _window_label(start_sec: float, end_sec: float) -> str:
 
 
 def _confidence_from_qc(face_coverage: float, hand_coverage: float, pose_coverage: float) -> str:
-    if face_coverage >= 0.92 and hand_coverage >= 0.85 and pose_coverage >= 0.97:
+    cfg = _BASE_THRESHOLDS["coaching"]["qc_confidence"]
+    if (
+        face_coverage >= float(cfg["high_face_min"])
+        and hand_coverage >= float(cfg["high_hand_min"])
+        and pose_coverage >= float(cfg["high_pose_min"])
+    ):
         return "high"
-    if face_coverage >= 0.70 and pose_coverage >= 0.92:
+    if face_coverage >= float(cfg["medium_face_min"]) and pose_coverage >= float(cfg["medium_pose_min"]):
         return "medium"
     return "low"
 
@@ -174,48 +99,62 @@ def _unique_strings(values: list[str]) -> list[str]:
 
 
 def _metric_band(score: float) -> str:
-    if score >= 75:
+    if score >= float(_BASE_THRESHOLDS["interpretation_bands"]["strong_min"]):
         return "strong"
-    if score >= 55:
+    if score >= float(_BASE_THRESHOLDS["interpretation_bands"]["moderate_min"]):
         return "moderate"
     return "limited"
 
 
 def _risk_band(score: float) -> str:
-    if score >= 65:
+    if score >= float(_BASE_THRESHOLDS["risk_bands"]["high_min"]):
         return "high"
-    if score >= 35:
+    if score >= float(_BASE_THRESHOLDS["risk_bands"]["moderate_min"]):
         return "moderate"
     return "low"
 
 
 def _overall_pattern(summary: dict[str, Any], semantic_payload: dict[str, Any] | None) -> str:
     score = summary["scores"]
+    cfg = _BASE_THRESHOLDS["coaching"]["overall_pattern"]
     parts: list[str] = []
-    if score["confidence_presence_score"] >= 72 and score["posture_stability_score"] >= 75:
+    if (
+        score["confidence_presence_score"] >= float(cfg["presence_strong_min"])
+        and score["posture_stability_score"] >= float(cfg["posture_strong_min"])
+    ):
         parts.append("Delivery generally reads as upright and physically settled")
-    elif score["confidence_presence_score"] < 60:
+    elif score["confidence_presence_score"] < float(cfg["presence_low_max"]):
         parts.append("Delivery looks less settled in physical presence")
 
-    if score["eye_contact_distribution_score"] >= 70:
+    if score["eye_contact_distribution_score"] >= float(cfg["eye_distribution_strong_min"]):
         parts.append("room engagement appears reasonably distributed")
-    elif score["eye_contact_distribution_score"] < 55:
+    elif score["eye_contact_distribution_score"] < float(cfg["eye_distribution_low_max"]):
         parts.append("room engagement looks uneven")
 
-    if score["natural_movement_score"] >= 68 and summary["category_feedback"]["gesture_and_facial_expression"]["excessive_animation_risk"] < 35:
+    if (
+        score["natural_movement_score"] >= float(cfg["natural_movement_strong_min"])
+        and summary["category_feedback"]["gesture_and_facial_expression"]["excessive_animation_risk"]
+        < float(cfg["static_behavior_risk_min"])
+    ):
         parts.append("gesture use is mostly controlled and explanatory")
-    elif summary["category_feedback"]["gesture_and_facial_expression"]["static_behavior_risk"] >= 35:
+    elif (
+        summary["category_feedback"]["gesture_and_facial_expression"]["static_behavior_risk"]
+        >= float(cfg["static_behavior_risk_min"])
+    ):
         parts.append("movement is somewhat limited")
-    elif summary["category_feedback"]["gesture_and_facial_expression"]["excessive_animation_risk"] >= 50:
+    elif (
+        summary["category_feedback"]["gesture_and_facial_expression"]["excessive_animation_risk"]
+        >= float(cfg["excessive_animation_risk_min"])
+    ):
         parts.append("some motion spikes may be larger than needed")
 
     if semantic_payload:
         qwen = semantic_payload.get("summary", {}).get("qwen", {})
         if qwen.get("status") == "completed":
             aggregate = qwen.get("aggregate", {})
-            if aggregate.get("notes_focus_ratio", 0.0) >= 0.40:
+            if aggregate.get("notes_focus_ratio", 0.0) >= float(cfg["notes_focus_ratio_min"]):
                 parts.append("semantic review suggests the clip includes noticeable note-reading")
-            elif aggregate.get("audience_focus_ratio", 0.0) >= 0.55:
+            elif aggregate.get("audience_focus_ratio", 0.0) >= float(cfg["audience_focus_ratio_min"]):
                 parts.append("semantic review sees the instructor mostly addressing the audience")
 
     if not parts:
@@ -226,12 +165,13 @@ def _overall_pattern(summary: dict[str, Any], semantic_payload: dict[str, Any] |
 def _reliability_notes(summary: dict[str, Any]) -> dict[str, Any]:
     qc = summary["quality_control"]
     clip = summary["clip"]
+    cfg = _BASE_THRESHOLDS["coaching"]["reliability"]
     notes: list[str] = []
-    if qc["face_coverage"] < 0.85:
+    if qc["face_coverage"] < float(cfg["note_face_max"]):
         notes.append("Face visibility is limited in parts of the clip, so eye-contact and facial-tone claims are less certain.")
-    if qc["hand_coverage"] < 0.80:
+    if qc["hand_coverage"] < float(cfg["note_hand_max"]):
         notes.append("Hand visibility drops in parts of the clip, so gesture labels are less certain.")
-    if clip["duration_sec_actual"] < 30:
+    if clip["duration_sec_actual"] < float(cfg["note_short_clip_sec"]):
         notes.append("Short duration limits how confidently the report can generalize beyond this segment.")
     for warning in summary["warnings"]:
         if warning not in notes:
@@ -240,11 +180,15 @@ def _reliability_notes(summary: dict[str, Any]) -> dict[str, Any]:
         notes.append("Tracking quality is stable enough for formative review, but the outputs remain heuristic proxies rather than direct teaching-quality measures.")
 
     qc_score = 0
-    qc_score += 1 if qc["pose_coverage"] >= 0.97 else 0
-    qc_score += 1 if qc["face_coverage"] >= 0.90 else 0
-    qc_score += 1 if qc["hand_coverage"] >= 0.85 else 0
-    qc_score += 1 if clip["duration_sec_actual"] >= 45 else 0
-    label = "high" if qc_score >= 4 else "medium" if qc_score >= 2 else "low"
+    qc_score += 1 if qc["pose_coverage"] >= float(cfg["score_pose_min"]) else 0
+    qc_score += 1 if qc["face_coverage"] >= float(cfg["score_face_min"]) else 0
+    qc_score += 1 if qc["hand_coverage"] >= float(cfg["score_hand_min"]) else 0
+    qc_score += 1 if clip["duration_sec_actual"] >= float(cfg["score_duration_sec_min"]) else 0
+    label = (
+        "high"
+        if qc_score >= int(cfg["high_score_min"])
+        else "medium" if qc_score >= int(cfg["medium_score_min"]) else "low"
+    )
     return {
         "label": label,
         "summary": f"Reliability is {label} for this segment based on face, hand, and pose coverage plus clip length.",
@@ -257,6 +201,7 @@ def _window_priority_candidates(window_df: pd.DataFrame) -> list[dict[str, Any]]
         return []
 
     candidates: list[dict[str, Any]] = []
+    cfg = _BASE_THRESHOLDS["coaching"]["candidate_thresholds"]
 
     def add_candidate(row: pd.Series, kind: str, reason: str, priority: float) -> None:
         candidates.append(
@@ -272,7 +217,7 @@ def _window_priority_candidates(window_df: pd.DataFrame) -> list[dict[str, Any]]
     add_candidate(window_df.sort_values("heuristic_nonverbal_score", ascending=False).iloc[0], "strength", "best_overall", 92.0)
 
     eye_row = window_df.sort_values("eye_contact_distribution_score", ascending=True).iloc[0]
-    if float(eye_row["eye_contact_distribution_score"]) < 68:
+    if float(eye_row["eye_contact_distribution_score"]) < float(cfg["eye_contact_action_max"]):
         add_candidate(eye_row, "action", "low_eye_contact_distribution", 100.0 - float(eye_row["eye_contact_distribution_score"]))
 
     presence_row = window_df.assign(
@@ -281,7 +226,7 @@ def _window_priority_candidates(window_df: pd.DataFrame) -> list[dict[str, Any]]
             df["closed_posture_risk"],
         )
     ).sort_values("presence_issue", ascending=False).iloc[0]
-    if float(presence_row["presence_issue"]) >= 35:
+    if float(presence_row["presence_issue"]) >= float(cfg["presence_issue_min"]):
         add_candidate(presence_row, "action", "posture_presence_issue", float(presence_row["presence_issue"]))
 
     movement_issue_df = window_df.assign(
@@ -294,7 +239,7 @@ def _window_priority_candidates(window_df: pd.DataFrame) -> list[dict[str, Any]]
         )
     )
     movement_row = movement_issue_df.sort_values("movement_issue", ascending=False).iloc[0]
-    if float(movement_row["movement_issue"]) >= 35:
+    if float(movement_row["movement_issue"]) >= float(cfg["movement_issue_min"]):
         add_candidate(movement_row, "action", "movement_issue", float(movement_row["movement_issue"]))
 
     affect_issue_df = window_df.assign(
@@ -304,11 +249,11 @@ def _window_priority_candidates(window_df: pd.DataFrame) -> list[dict[str, Any]]
         )
     )
     affect_row = affect_issue_df.sort_values("affect_issue", ascending=False).iloc[0]
-    if float(affect_row["affect_issue"]) >= 35:
+    if float(affect_row["affect_issue"]) >= float(cfg["affect_issue_min"]):
         add_candidate(affect_row, "action", "affect_issue", float(affect_row["affect_issue"]))
 
     face_row = window_df.sort_values("face_coverage", ascending=True).iloc[0]
-    if float(face_row["face_coverage"]) < 0.85:
+    if float(face_row["face_coverage"]) < float(cfg["face_coverage_action_max"]):
         add_candidate(face_row, "reliability", "low_face_coverage", (1.0 - float(face_row["face_coverage"])) * 100.0)
 
     unique: list[dict[str, Any]] = []
@@ -325,34 +270,50 @@ def _window_priority_candidates(window_df: pd.DataFrame) -> list[dict[str, Any]]
 
 def _window_base_tags(row: dict[str, Any], kind: str) -> list[str]:
     tags: list[str] = []
+    cfg = _BASE_THRESHOLDS["coaching"]["window_tags"]
     if kind != "strength":
-        if row["face_coverage"] < 0.85:
+        if row["face_coverage"] < float(cfg["face_coverage_low_max"]):
             tags.append("low_face_visibility")
-        if row["eye_contact_distribution_score"] < 55:
+        if row["eye_contact_distribution_score"] < float(cfg["eye_distribution_low_max"]):
             tags.append("uneven_room_scan")
-        if row["audience_orientation_score"] < 55:
+        if row["audience_orientation_score"] < float(cfg["audience_orientation_low_max"]):
             tags.append("low_audience_orientation")
-        if row["confidence_presence_score"] < 60 or row["closed_posture_risk"] >= 35:
+        if (
+            row["confidence_presence_score"] < float(cfg["presence_low_max"])
+            or row["closed_posture_risk"] >= float(cfg["closed_posture_risk_min"])
+        ):
             tags.append("closed_posture")
-        if row["natural_movement_score"] < 45 and row["static_behavior_risk"] >= 35:
+        if (
+            row["natural_movement_score"] < float(cfg["natural_movement_low_max"])
+            and row["static_behavior_risk"] >= float(cfg["static_behavior_risk_min"])
+        ):
             tags.append("limited_movement")
-        if row["excessive_animation_risk"] >= 50:
+        if row["excessive_animation_risk"] >= float(cfg["excessive_animation_risk_min"]):
             tags.append("over_animated_delivery")
-        if row["positive_affect_score"] < 50 or row["tension_hostility_risk"] >= 35:
+        if (
+            row["positive_affect_score"] < float(cfg["positive_affect_low_max"])
+            or row["tension_hostility_risk"] >= float(cfg["tension_hostility_risk_min"])
+        ):
             tags.append("tense_or_neutral_affect")
-        if row["alertness_score"] < 60:
+        if row["alertness_score"] < float(cfg["alertness_low_max"]):
             tags.append("reduced_alertness")
 
     if kind == "strength":
-        if row["eye_contact_distribution_score"] >= 70:
+        if row["eye_contact_distribution_score"] >= float(cfg["strength_eye_distribution_min"]):
             tags.append("distributed_room_engagement")
-        if row["confidence_presence_score"] >= 75 and row["posture_stability_score"] >= 75:
+        if (
+            row["confidence_presence_score"] >= float(cfg["strength_presence_min"])
+            and row["posture_stability_score"] >= float(cfg["strength_posture_min"])
+        ):
             tags.append("upright_confident_presence")
-        if row["natural_movement_score"] >= 65 and row["excessive_animation_risk"] < 35:
+        if (
+            row["natural_movement_score"] >= float(cfg["strength_natural_movement_min"])
+            and row["excessive_animation_risk"] < float(cfg["strength_excessive_animation_max"])
+        ):
             tags.append("controlled_expressive_gestures")
-        if row["positive_affect_score"] >= 55:
+        if row["positive_affect_score"] >= float(cfg["strength_positive_affect_min"]):
             tags.append("welcoming_affect")
-        if row["alertness_score"] >= 75:
+        if row["alertness_score"] >= float(cfg["strength_alertness_min"]):
             tags.append("alert_room_presence")
     return _unique_strings(tags)
 

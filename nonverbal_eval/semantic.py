@@ -14,6 +14,10 @@ import pandas as pd
 from PIL import Image
 
 from .pipeline import log_event
+from .runtime_config import load_qwen_prompt_config
+
+
+_QWEN_CONFIG = load_qwen_prompt_config()["frame_semantic_review"]
 
 
 @dataclass(slots=True)
@@ -22,12 +26,12 @@ class SemanticConfig:
     sample_interval_sec: float = 6.0
     max_samples: int = 8
     qwen_enabled: bool = True
-    qwen_model: str = "Qwen/Qwen2.5-VL-7B-Instruct"
+    qwen_model: str = str(_QWEN_CONFIG["model"])
     qwen_device: str = "cuda:0"
     qwen_device_map: str | None = None
     qwen_dtype: str = "bfloat16"
-    qwen_max_new_tokens: int = 180
-    qwen_temperature: float = 0.1
+    qwen_max_new_tokens: int = int(_QWEN_CONFIG["max_new_tokens"])
+    qwen_temperature: float = float(_QWEN_CONFIG["temperature"])
     sam2_enabled: bool = True
     sam2_model_cfg: str | None = None
     sam2_checkpoint: Path | None = None
@@ -54,16 +58,7 @@ class SemanticSample:
     frame_shape: tuple[int, int, int]
 
 
-QWEN_PROMPT = """You are reviewing a single frame from a classroom lecture video.
-Return JSON only with exactly these keys:
-- teacher_focus: one of [audience, board, screen, notes, ambiguous]
-- body_action: one of [open_palm_explaining, pointing_board, pointing_screen, writing_board, walking, static_stance, reading_from_notes, ambiguous]
-- affect_tone: one of [warm, neutral, tense, ambiguous]
-- posture_signal: one of [upright_open, upright_neutral, closed_or_slouched, ambiguous]
-- attention_note: short phrase, at most 12 words
-- evidence_confidence: one of [low, medium, high]
-- rationale: short phrase, at most 20 words
-Do not add markdown or explanation outside the JSON object."""
+QWEN_PROMPT = str(_QWEN_CONFIG["prompt"])
 
 ALLOWED_QWEN_VALUES = {
     "teacher_focus": {"audience", "board", "screen", "notes", "ambiguous"},

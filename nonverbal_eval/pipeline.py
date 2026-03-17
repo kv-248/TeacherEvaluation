@@ -14,8 +14,11 @@ import pandas as pd
 from scipy.fft import fft
 from scipy.signal import cheby1, filtfilt
 
+from .runtime_config import load_base_thresholds
+
 
 EPS = 1e-6
+_BASE_THRESHOLDS = load_base_thresholds()
 
 FACE_NOSE = 1
 FACE_LEFT_CHEEK = 234
@@ -114,17 +117,17 @@ def _score_peak(value: float, low: float, mid: float, high: float) -> float:
 
 
 def _band(score: float) -> str:
-    if score >= 75:
+    if score >= float(_BASE_THRESHOLDS["interpretation_bands"]["strong_min"]):
         return "strong"
-    if score >= 55:
+    if score >= float(_BASE_THRESHOLDS["interpretation_bands"]["moderate_min"]):
         return "moderate"
     return "limited"
 
 
 def _risk_band(score: float) -> str:
-    if score >= 65:
+    if score >= float(_BASE_THRESHOLDS["risk_bands"]["high_min"]):
         return "high"
-    if score >= 35:
+    if score >= float(_BASE_THRESHOLDS["risk_bands"]["moderate_min"]):
         return "moderate"
     return "low"
 
@@ -520,39 +523,41 @@ def summarize_frame_metrics(frame_df: pd.DataFrame, fps: float, clip_info: dict[
 def _build_feedback(summary: dict[str, Any]) -> dict[str, list[str]]:
     strengths: list[str] = []
     watch_items: list[str] = []
+    strength_cfg = _BASE_THRESHOLDS["feedback_strengths"]
+    watch_cfg = _BASE_THRESHOLDS["feedback_watch"]
 
     gesture = summary["category_feedback"]["gesture_and_facial_expression"]
     posture = summary["category_feedback"]["posture_and_presence"]
     eye_contact = summary["category_feedback"]["eye_contact_and_engagement"]
 
-    if gesture["natural_movement_score"] >= 70:
+    if gesture["natural_movement_score"] >= float(strength_cfg["natural_movement_min"]):
         strengths.append("Gesture movement looks natural rather than statue-like or mechanical.")
-    if gesture["positive_affect_score"] >= 55:
+    if gesture["positive_affect_score"] >= float(strength_cfg["positive_affect_min"]):
         strengths.append("Facial affect reads as reasonably welcoming and approachable.")
-    if gesture["enthusiasm_score"] >= 65:
+    if gesture["enthusiasm_score"] >= float(strength_cfg["enthusiasm_min"]):
         strengths.append("Energy level appears engaged without obvious over-animation.")
-    if posture["upright_relaxed_posture_score"] >= 75:
+    if posture["upright_relaxed_posture_score"] >= float(strength_cfg["upright_posture_min"]):
         strengths.append("Posture is upright and stable, supporting a confident classroom presence.")
-    if posture["confidence_presence_score"] >= 70:
+    if posture["confidence_presence_score"] >= float(strength_cfg["confidence_presence_min"]):
         strengths.append("Body openness and stance suggest confident delivery rather than closed-off presentation.")
-    if eye_contact["eye_contact_distribution_score"] >= 60:
+    if eye_contact["eye_contact_distribution_score"] >= float(strength_cfg["eye_distribution_min"]):
         strengths.append("Head and gaze behavior show some distribution across audience sectors rather than a single fixed target.")
-    if eye_contact["alertness_score"] >= 65:
+    if eye_contact["alertness_score"] >= float(strength_cfg["alertness_min"]):
         strengths.append("The instructor appears alert and attentive to the room.")
 
-    if gesture["static_behavior_risk"] >= 35:
+    if gesture["static_behavior_risk"] >= float(watch_cfg["static_behavior_risk_min"]):
         watch_items.append("Movement may be too limited in places; check for stretches of static delivery.")
-    if gesture["excessive_animation_risk"] >= 35:
+    if gesture["excessive_animation_risk"] >= float(watch_cfg["excessive_animation_risk_min"]):
         watch_items.append("Movement may occasionally become more animated than needed for the teaching point.")
-    if gesture["tension_hostility_risk"] >= 35:
+    if gesture["tension_hostility_risk"] >= float(watch_cfg["tension_hostility_risk_min"]):
         watch_items.append("Facial affect looks somewhat tense; verify that expressions do not read as harsh or closed.")
-    if gesture["rigidity_risk"] >= 35:
+    if gesture["rigidity_risk"] >= float(watch_cfg["rigidity_risk_min"]):
         watch_items.append("Expression and gesture variability are limited enough to risk a rigid presentation style.")
-    if posture["closed_posture_risk"] >= 35:
+    if posture["closed_posture_risk"] >= float(watch_cfg["closed_posture_risk_min"]):
         watch_items.append("Body posture trends somewhat closed; monitor slouching or arm positions that reduce openness.")
-    if eye_contact["eye_contact_distribution_score"] < 50:
+    if eye_contact["eye_contact_distribution_score"] < float(watch_cfg["eye_distribution_low_max"]):
         watch_items.append("Gaze distribution appears uneven; check whether the lecture favors one audience sector.")
-    if eye_contact["alertness_score"] < 55:
+    if eye_contact["alertness_score"] < float(watch_cfg["alertness_low_max"]):
         watch_items.append("Alertness cues are weaker than ideal; review eyelid openness and room-facing orientation.")
 
     if not strengths:
@@ -686,15 +691,15 @@ def _build_summary(df: pd.DataFrame, motion_stats: dict[str, float], clip_info: 
     heuristic_nonverbal_score = float(np.clip(heuristic_nonverbal_score, 0.0, 100.0))
 
     warnings: list[str] = []
-    if pose_coverage < 0.95:
+    if pose_coverage < float(_BASE_THRESHOLDS["quality_control"]["pose_stable_min"]):
         warnings.append("Pose coverage dropped below 95%; posture and gesture scores are less stable.")
-    if face_coverage < 0.95:
+    if face_coverage < float(_BASE_THRESHOLDS["quality_control"]["face_stable_min"]):
         warnings.append("Face coverage dropped below 95%; audience orientation and facial scores are less stable.")
-    if hand_coverage < 0.85:
+    if hand_coverage < float(_BASE_THRESHOLDS["quality_control"]["hand_stable_min"]):
         warnings.append("Hand coverage dropped below 85%; gesture classification is less stable.")
     if clip_info["duration_sec_actual"] < clip_info["duration_sec_requested"] * 0.95:
         warnings.append("Extracted clip is shorter than requested.")
-    if clip_duration < 4.5:
+    if clip_duration < float(_BASE_THRESHOLDS["quality_control"]["short_clip_sec"]):
         warnings.append("Short clip duration limits any claim about full-lecture eye-contact distribution.")
 
     summary = {

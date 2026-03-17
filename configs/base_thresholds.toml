@@ -1,5 +1,5 @@
-version = "0.1.0"
-purpose = "Skeleton for externalizing nonverbal heuristic thresholds and quality-control bands."
+version = "0.2.0"
+purpose = "Externalized interpretation thresholds, QC bands, and coaching-trigger thresholds."
 
 [quality_control]
 pose_stable_min = 0.95
@@ -15,6 +15,77 @@ moderate_min = 55.0
 high_min = 65.0
 moderate_min = 35.0
 
-[notes]
-status = "skeleton_only"
-comment = "Wave 2 will migrate hardcoded scoring thresholds into this config."
+[feedback_strengths]
+natural_movement_min = 70.0
+positive_affect_min = 55.0
+enthusiasm_min = 65.0
+upright_posture_min = 75.0
+confidence_presence_min = 70.0
+eye_distribution_min = 60.0
+alertness_min = 65.0
+
+[feedback_watch]
+static_behavior_risk_min = 35.0
+excessive_animation_risk_min = 35.0
+tension_hostility_risk_min = 35.0
+rigidity_risk_min = 35.0
+closed_posture_risk_min = 35.0
+eye_distribution_low_max = 50.0
+alertness_low_max = 55.0
+
+[coaching.qc_confidence]
+high_face_min = 0.92
+high_hand_min = 0.85
+high_pose_min = 0.97
+medium_face_min = 0.70
+medium_pose_min = 0.92
+
+[coaching.overall_pattern]
+presence_strong_min = 72.0
+posture_strong_min = 75.0
+presence_low_max = 60.0
+eye_distribution_strong_min = 70.0
+eye_distribution_low_max = 55.0
+natural_movement_strong_min = 68.0
+static_behavior_risk_min = 35.0
+excessive_animation_risk_min = 50.0
+notes_focus_ratio_min = 0.40
+audience_focus_ratio_min = 0.55
+
+[coaching.reliability]
+note_face_max = 0.85
+note_hand_max = 0.80
+note_short_clip_sec = 30.0
+score_pose_min = 0.97
+score_face_min = 0.90
+score_hand_min = 0.85
+score_duration_sec_min = 45.0
+high_score_min = 4
+medium_score_min = 2
+
+[coaching.candidate_thresholds]
+eye_contact_action_max = 68.0
+presence_issue_min = 35.0
+movement_issue_min = 35.0
+affect_issue_min = 35.0
+face_coverage_action_max = 0.85
+
+[coaching.window_tags]
+face_coverage_low_max = 0.85
+eye_distribution_low_max = 55.0
+audience_orientation_low_max = 55.0
+presence_low_max = 60.0
+closed_posture_risk_min = 35.0
+natural_movement_low_max = 45.0
+static_behavior_risk_min = 35.0
+excessive_animation_risk_min = 50.0
+positive_affect_low_max = 50.0
+tension_hostility_risk_min = 35.0
+alertness_low_max = 60.0
+strength_eye_distribution_min = 70.0
+strength_presence_min = 75.0
+strength_posture_min = 75.0
+strength_natural_movement_min = 65.0
+strength_excessive_animation_max = 35.0
+strength_positive_affect_min = 55.0
+strength_alertness_min = 75.0
