@@ -1,0 +1,13 @@
+clip_id,reviewer,review_date,correctness_score,actionability_score,timestamp_usefulness_score,tone_score,confidence_handling_score,pass_fail,primary_failure_mode,secondary_failure_mode,main_strength,evidence_tags,notes
+clip_01,,,,,,,,,,,,,
+clip_02,,,,,,,,,,,,,
+clip_03,,,,,,,,,,,,,
+clip_04,,,,,,,,,,,,,
+clip_05,,,,,,,,,,,,,
+clip_06,,,,,,,,,,,,,
+clip_07,,,,,,,,,,,,,
+clip_08,,,,,,,,,,,,,
+clip_09,,,,,,,,,,,,,
+clip_10,,,,,,,,,,,,,
+clip_11,,,,,,,,,,,,,
+clip_12,,,,,,,,,,,,,
