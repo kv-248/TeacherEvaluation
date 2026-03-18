@@ -1935,9 +1935,7 @@ def _render_markdown(report: dict[str, Any], evidence: dict[str, Any], artifacts
         lines.extend([f"### {card['timestamp']} - {card['headline']}", ""])
         moment = moment_lookup.get(card["timestamp"])
         if moment:
-            image_name = moment["image_path"]
-            lines.append(f"![Evidence frame](coaching_moments/{image_name})")
-            lines.append("")
+            pass
         lines.extend(
             [
                 f"- Observed behavior: {card['observed_behavior']}",

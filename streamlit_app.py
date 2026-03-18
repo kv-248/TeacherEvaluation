@@ -361,15 +361,6 @@ def _render_watchlist(report: dict[str, Any]) -> None:
             st.markdown(f"**What to monitor next:** {item.get('what_to_monitor_next', '')}")
 
 
-def _render_reliability(report: dict[str, Any]) -> None:
-    st.subheader("Reliability Notes")
-    notes = report.get("confidence_notes", [])
-    if not notes:
-        st.write("No extra reliability notes were generated.")
-        return
-    for note in notes:
-        st.markdown(f"- {note}")
-
 
 def _clean_interpretation(text: str) -> str:
     """Strip internal model-name prefixes from semantic interpretation text."""
@@ -436,7 +427,6 @@ def main() -> None:
         _render_additional_observation_inventory(qa_report)
         _render_watchlist(qa_report)
         _render_moments(qa_report)
-        _render_reliability(qa_report)
         st.subheader("Downloads")
         _render_downloads_from_report(qa_report)
         return
@@ -541,7 +531,6 @@ def main() -> None:
     _render_additional_observation_inventory(report)
     _render_watchlist(report)
     _render_moments(report)
-    _render_reliability(report)
 
     st.subheader("Downloads")
     _report_downloads(report_artifacts)

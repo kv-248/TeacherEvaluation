@@ -104,6 +104,45 @@ This is the recommended path for this repo. It avoids local heavy-model download
 
 Legacy local-transformer support still exists in code, but it is no longer the default and it is not required for normal use. If you ever need that older path for experiments, install:
 
+## Build an Evaluation Dataset
+
+Use the manifest-driven dataset builder to create one-minute lecture clips that can be fed directly into the evaluation pipeline.
+
+Seed the dataset from the bundled sample video:
+
+```bash
+python build_eval_dataset.py
+```
+
+Use a custom manifest with local files or public lecture URLs:
+
+```bash
+python build_eval_dataset.py --manifest manifests/lecture_eval_seed.jsonl --output-root datasets/lecture_eval_seed
+```
+
+Download the curated YouTube lecture set that was selected for this repo's evaluation use case:
+
+```bash
+python build_eval_dataset.py --manifest manifests/lecture_eval_youtube_curated.jsonl --output-root datasets/lecture_eval_youtube_curated
+```
+
+The builder writes:
+
+- `datasets/<name>/clips/`
+  - trimmed lecture clips ready for `run_experiment.py` or `run_long_experiment.py`
+- `datasets/<name>/metadata/clips.csv`
+  - clip inventory with durations, fps, tags, and evaluation focus
+- `datasets/<name>/metadata/dataset_report.md`
+  - a compact dataset card for review
+
+If you want to run Real-ESRGAN on the trimmed clips, first install `basicsr` and `realesrgan`, then enable:
+
+```bash
+python build_eval_dataset.py --enable-superres
+```
+
+Optional semantic layer with Qwen and SAM2 as additive outputs only:
+
 ```bash
 pip install -r requirements_optional_semantic.txt
 ```

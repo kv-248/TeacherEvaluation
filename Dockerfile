@@ -1,4 +1,4 @@
-FROM python:3.10-slim
+FROM python:3.11-slim
 
 WORKDIR /app
 
@@ -13,12 +13,12 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements and install
-COPY requirements.txt requirements_eval.txt ./
-RUN pip install --no-cache-dir -r requirements_eval.txt
+COPY requirements.txt requirements_eval.txt requirements_frontend.txt ./
+RUN pip install --no-cache-dir -r requirements_eval.txt -r requirements_frontend.txt
 
 # Copy source code
 COPY . .
 
 # Set default command to run Streamlit
 EXPOSE 8501
-CMD ["streamlit", "run", "streamlit_app.py", "--server.address=0.0.0.0"]
+CMD ["streamlit", "run", "streamlit_app.py", "--server.port=8501", "--server.address=0.0.0.0", "--server.headless=true", "--server.enableCORS=false", "--server.enableXsrfProtection=false", "--server.fileWatcherType=none"]
