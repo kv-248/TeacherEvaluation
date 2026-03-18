@@ -366,10 +366,7 @@ def _window_base_tags(row: dict[str, Any], kind: str) -> list[str]:
             tags.append("over_animated_delivery")
         if (
             row["face_coverage"] >= float(cfg["affect_face_coverage_min"])
-            and (
-                row["positive_affect_score"] < float(cfg["positive_affect_low_max"])
-                or row["tension_hostility_risk"] >= float(cfg["tension_hostility_risk_min"])
-            )
+            and row["tension_hostility_risk"] >= float(cfg["tension_hostility_risk_min"])
         ):
             tags.append("tense_or_neutral_affect")
         if row["alertness_score"] < float(cfg["alertness_low_max"]):
@@ -1096,7 +1093,7 @@ def _prefer_maintenance_mode(
         return False
     if any(item["confidence"] == "high" for item in corrective_actions):
         return False
-    if any(float(item["max_severity"]) >= 60.0 for item in corrective_actions):
+    if any(float(item["max_severity"]) >= float(cfg["single_window_material_severity_min"]) for item in corrective_actions):
         return False
 
     return True

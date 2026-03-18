@@ -1,0 +1,81 @@
+{
+  "sample_count": 8,
+  "sample_timestamps_sec": [
+    0.0,
+    6.0,
+    14.25,
+    16.75,
+    29.96,
+    35.25,
+    48.0,
+    59.67
+  ],
+  "sample_reasons": [
+    "clip_start,uniform_sample,peak_posture",
+    "uniform_sample",
+    "peak_audience_orientation,low_audience_orientation",
+    "peak_gesture_motion,uniform_sample",
+    "clip_midpoint,uniform_sample",
+    "peak_smile_proxy,uniform_sample",
+    "uniform_sample",
+    "clip_end"
+  ],
+  "qwen": {
+    "status": "completed",
+    "reason": "Gemini semantic analysis completed.",
+    "aggregate": {
+      "sample_count": 8,
+      "audience_focus_ratio": 0.25,
+      "board_focus_ratio": 0.0,
+      "screen_focus_ratio": 0.0,
+      "notes_focus_ratio": 0.25,
+      "open_palm_explaining_ratio": 0.375,
+      "static_stance_ratio": 0.25,
+      "pointing_ratio": 0.0,
+      "writing_ratio": 0.0,
+      "warm_affect_ratio": 0.0,
+      "tense_affect_ratio": 0.0,
+      "closed_or_slouched_ratio": 0.25,
+      "focus_counts": {
+        "ambiguous": 4,
+        "notes": 2,
+        "audience": 2
+      },
+      "action_counts": {
+        "open_palm_explaining": 3,
+        "reading_from_notes": 2,
+        "static_stance": 2,
+        "ambiguous": 1
+      },
+      "affect_counts": {
+        "neutral": 8
+      },
+      "posture_counts": {
+        "upright_neutral": 5,
+        "closed_or_slouched": 2,
+        "upright_open": 1
+      }
+    }
+  },
+  "sam2": {
+    "status": "skipped",
+    "reason": "SAM2 semantic analysis disabled.",
+    "aggregate": {}
+  },
+  "agreement": {
+    "status": "available",
+    "label": "review",
+    "base_audience_orientation_ratio": 0.722,
+    "qwen_audience_focus_ratio": 0.25,
+    "difference": 0.472,
+    "note": "This agreement check is qualitative and does not change base scores."
+  },
+  "semantic_extensions": {
+    "audience_focus_ratio_qwen": 0.25,
+    "board_or_screen_focus_ratio_qwen": 0.0,
+    "warm_affect_ratio_qwen": 0.0,
+    "tense_affect_ratio_qwen": 0.0,
+    "static_stance_ratio_qwen": 0.25,
+    "pointing_ratio_qwen": 0.0
+  }
+}
