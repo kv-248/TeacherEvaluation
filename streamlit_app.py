@@ -21,6 +21,8 @@ UPLOAD_ROOT = WORK_ROOT / "uploads"
 RUN_ROOT = WORK_ROOT / "runs"
 QA_REPORT_JSON_ENV = "TEACHER_EVALUATION_QA_REPORT_JSON"
 QA_REPORT_PDF_ENV = "TEACHER_EVALUATION_QA_REPORT_PDF"
+SEMANTIC_MODEL_ENV = "TEACHER_EVALUATION_QWEN_MODEL"
+COACH_MODEL_ENV = "TEACHER_EVALUATION_COACH_MODEL"
 
 STAGE_LABELS = {
     "start": "Upload accepted",
@@ -440,6 +442,8 @@ def _render_sidebar_controls() -> dict[str, Any]:
     enable_semantic = st.sidebar.checkbox("Enable Qwen semantic review", value=False)
     coach_template_only = st.sidebar.checkbox("Template-only coaching", value=True)
     coach_top_actions = st.sidebar.slider("Priority actions", min_value=1, max_value=3, value=3)
+    st.sidebar.caption(f"Semantic model env override: `{os.getenv(SEMANTIC_MODEL_ENV, 'default')}`")
+    st.sidebar.caption(f"Coach model env override: `{os.getenv(COACH_MODEL_ENV, 'default')}`")
     return {
         "enable_semantic": enable_semantic,
         "coach_template_only": coach_template_only,
@@ -536,8 +540,10 @@ def main() -> None:
             window_step_sec=15.0,
             enable_semantic=controls["enable_semantic"],
             disable_qwen=not controls["enable_semantic"],
+            qwen_model=os.getenv(SEMANTIC_MODEL_ENV, "Qwen/Qwen2.5-VL-7B-Instruct"),
             disable_sam2=True,
             enable_coaching=True,
+            coach_model=os.getenv(COACH_MODEL_ENV, "Qwen/Qwen2.5-3B-Instruct"),
             coach_top_actions=controls["coach_top_actions"],
             coach_fallback_template_only=controls["coach_template_only"],
             progress_callback=progress_callback,

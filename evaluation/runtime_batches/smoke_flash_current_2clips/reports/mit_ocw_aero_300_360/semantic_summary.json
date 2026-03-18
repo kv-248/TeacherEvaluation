@@ -1,0 +1,38 @@
+{
+  "sample_count": 8,
+  "sample_timestamps_sec": [
+    0.0,
+    2.5,
+    12.0,
+    18.0,
+    24.0,
+    36.0,
+    48.0,
+    59.67
+  ],
+  "sample_reasons": [
+    "clip_start,uniform_sample",
+    "low_audience_orientation",
+    "uniform_sample",
+    "uniform_sample",
+    "uniform_sample,peak_audience_orientation",
+    "uniform_sample",
+    "uniform_sample",
+    "clip_end"
+  ],
+  "qwen": {
+    "status": "failed",
+    "reason": "Gemini semantic inference failed: RuntimeError: Gemini API key not found. Set GEMINI_API_KEY or GOOGLE_API_KEY.",
+    "aggregate": {}
+  },
+  "sam2": {
+    "status": "skipped",
+    "reason": "SAM2 semantic analysis disabled.",
+    "aggregate": {}
+  },
+  "agreement": {
+    "status": "not_available",
+    "reason": "Qwen semantic output was not available."
+  },
+  "semantic_extensions": {}
+}

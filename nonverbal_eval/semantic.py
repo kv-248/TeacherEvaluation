@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import json
 import math
 import re
@@ -13,6 +14,7 @@ import numpy as np
 import pandas as pd
 from PIL import Image
 
+from .gemini_api import generate_gemini_json, is_gemini_model
 from .pipeline import log_event
 from .runtime_config import load_qwen_prompt_config
 
@@ -78,6 +80,123 @@ ALLOWED_QWEN_VALUES = {
 }
 
 
+def _json_candidate_text(text: str) -> str:
+    cleaned = text.strip().lstrip("\ufeff")
+    fenced = re.search(r"```(?:json)?\s*(.*?)\s*```", cleaned, flags=re.DOTALL | re.IGNORECASE)
+    if fenced:
+        cleaned = fenced.group(1).strip()
+    return cleaned
+
+
+def _json_fragment(text: str) -> str:
+    cleaned = _json_candidate_text(text)
+    if not cleaned:
+        raise ValueError("Empty model output.")
+
+    for opening, closing in (("{", "}"), ("[", "]")):
+        start = cleaned.find(opening)
+        end = cleaned.rfind(closing)
+        if start != -1 and end != -1 and end > start:
+            fragment = cleaned[start : end + 1].strip()
+            if fragment:
+                return fragment
+    return cleaned
+
+
+def _extract_json_blob(text: str) -> dict[str, Any]:
+    candidates: list[str] = []
+    for candidate in (_json_candidate_text(text), _json_fragment(text)):
+        if candidate and candidate not in candidates:
+            candidates.append(candidate)
+
+    last_error: Exception | None = None
+    for candidate in candidates:
+        try:
+            value = json.loads(candidate)
+        except json.JSONDecodeError as exc:
+            last_error = exc
+        else:
+            if isinstance(value, dict):
+                return value
+            raise ValueError("Model output JSON must be an object.")
+
+        try:
+            value = ast.literal_eval(candidate)
+        except (SyntaxError, ValueError) as exc:
+            last_error = exc
+            continue
+        if isinstance(value, dict):
+            return value
+        raise ValueError("Model output JSON must be an object.")
+
+    raise ValueError(f"Could not parse JSON blob: {last_error}")
+
+
+def _gemini_annotation_schema() -> dict[str, Any]:
+    properties = {
+        "teacher_focus": {
+            "type": "string",
+            "enum": sorted(ALLOWED_QWEN_VALUES["teacher_focus"]),
+            "description": "Primary focus target in the frame.",
+        },
+        "body_action": {
+            "type": "string",
+            "enum": sorted(ALLOWED_QWEN_VALUES["body_action"]),
+            "description": "Observed body action in the frame.",
+        },
+        "affect_tone": {
+            "type": "string",
+            "enum": sorted(ALLOWED_QWEN_VALUES["affect_tone"]),
+            "description": "Observed affect tone.",
+        },
+        "posture_signal": {
+            "type": "string",
+            "enum": sorted(ALLOWED_QWEN_VALUES["posture_signal"]),
+            "description": "Observed posture signal.",
+        },
+        "attention_note": {
+            "type": "string",
+            "description": "Short note about attention cues.",
+        },
+        "evidence_confidence": {
+            "type": "string",
+            "enum": sorted(ALLOWED_QWEN_VALUES["evidence_confidence"]),
+            "description": "Confidence in the annotation.",
+        },
+        "rationale": {
+            "type": "string",
+            "description": "Short rationale for the annotation.",
+        },
+    }
+    property_ordering = list(properties.keys())
+    return {
+        "type": "object",
+        "properties": properties,
+        "required": property_ordering,
+        "additionalProperties": False,
+        "propertyOrdering": property_ordering,
+    }
+
+
+def _build_qwen_annotation(sample: SemanticSample, parsed: dict[str, Any], raw_text: str) -> dict[str, Any]:
+    annotation = {
+        "timestamp_sec": sample.timestamp_sec,
+        "reason": sample.reason,
+        "raw_text": raw_text.strip(),
+        "teacher_focus": str(parsed.get("teacher_focus", "ambiguous")).strip(),
+        "body_action": str(parsed.get("body_action", "ambiguous")).strip(),
+        "affect_tone": str(parsed.get("affect_tone", "ambiguous")).strip(),
+        "posture_signal": str(parsed.get("posture_signal", "ambiguous")).strip(),
+        "attention_note": _sanitize_short_text(parsed.get("attention_note", ""), max_words=12),
+        "evidence_confidence": str(parsed.get("evidence_confidence", "medium")).strip(),
+        "rationale": _sanitize_short_text(parsed.get("rationale", ""), max_words=20),
+    }
+    for field, allowed_values in ALLOWED_QWEN_VALUES.items():
+        if annotation[field] not in allowed_values:
+            annotation[field] = "ambiguous" if "ambiguous" in allowed_values else "medium"
+    return annotation
+
+
 def build_semantic_artifacts(run_dir: Path) -> SemanticArtifacts:
     root_dir = run_dir / "semantic_extensions"
     sampled_frames_dir = root_dir / "sampled_frames"
@@ -125,20 +244,6 @@ def _sanitize_short_text(value: Any, max_words: int) -> str:
     if len(words) > max_words:
         text = " ".join(words[:max_words])
     return text
-
-
-def _extract_json_blob(text: str) -> dict[str, Any]:
-    text = text.strip()
-    if not text:
-        raise ValueError("Empty model output.")
-    fenced = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, flags=re.DOTALL)
-    if fenced:
-        text = fenced.group(1)
-    else:
-        match = re.search(r"\{.*\}", text, flags=re.DOTALL)
-        if match:
-            text = match.group(0)
-    return json.loads(text)
 
 
 def _choose_timestamps(frame_metrics_df: pd.DataFrame, clip_duration_sec: float, interval_sec: float, max_samples: int) -> list[tuple[float, str]]:
@@ -259,6 +364,74 @@ def _run_qwen(
     if not config.qwen_enabled:
         return result
 
+    if is_gemini_model(config.qwen_model):
+        annotations: list[dict[str, Any]] = []
+        try:
+            for sample in samples:
+                parsed, raw_text = generate_gemini_json(
+                    model_name=config.qwen_model,
+                    system_instruction=(
+                        "You are reviewing a single frame from a classroom lecture video. "
+                        "Return only the JSON object that matches the schema. "
+                        "Use only the allowed enum values for categorical fields."
+                    ),
+                    user_text=QWEN_PROMPT,
+                    image_paths=[sample.image_path],
+                    max_output_tokens=max(int(config.qwen_max_new_tokens), 192),
+                    temperature=0.0,
+                    response_json_schema=_gemini_annotation_schema(),
+                )
+                annotations.append(_build_qwen_annotation(sample, parsed, raw_text))
+        except Exception as exc:
+            result["status"] = "failed"
+            result["reason"] = f"Gemini semantic inference failed: {type(exc).__name__}: {exc}"
+            return result
+
+        focus_counts = pd.Series([row["teacher_focus"] for row in annotations]).value_counts().to_dict()
+        action_counts = pd.Series([row["body_action"] for row in annotations]).value_counts().to_dict()
+        affect_counts = pd.Series([row["affect_tone"] for row in annotations]).value_counts().to_dict()
+        posture_counts = pd.Series([row["posture_signal"] for row in annotations]).value_counts().to_dict()
+        annotation_count = max(len(annotations), 1)
+        aggregate = {
+            "sample_count": len(annotations),
+            "audience_focus_ratio": _safe_ratio(focus_counts.get("audience", 0), annotation_count),
+            "board_focus_ratio": _safe_ratio(focus_counts.get("board", 0), annotation_count),
+            "screen_focus_ratio": _safe_ratio(focus_counts.get("screen", 0), annotation_count),
+            "notes_focus_ratio": _safe_ratio(focus_counts.get("notes", 0), annotation_count),
+            "open_palm_explaining_ratio": _safe_ratio(action_counts.get("open_palm_explaining", 0), annotation_count),
+            "static_stance_ratio": _safe_ratio(action_counts.get("static_stance", 0), annotation_count),
+            "pointing_ratio": _safe_ratio(
+                action_counts.get("pointing_board", 0) + action_counts.get("pointing_screen", 0), annotation_count
+            ),
+            "writing_ratio": _safe_ratio(action_counts.get("writing_board", 0), annotation_count),
+            "warm_affect_ratio": _safe_ratio(affect_counts.get("warm", 0), annotation_count),
+            "tense_affect_ratio": _safe_ratio(affect_counts.get("tense", 0), annotation_count),
+            "closed_or_slouched_ratio": _safe_ratio(posture_counts.get("closed_or_slouched", 0), annotation_count),
+            "focus_counts": focus_counts,
+            "action_counts": action_counts,
+            "affect_counts": affect_counts,
+            "posture_counts": posture_counts,
+        }
+        result.update(
+            {
+                "status": "completed",
+                "reason": "Gemini semantic analysis completed.",
+                "device": "gemini_api",
+                "annotations": annotations,
+                "aggregate": aggregate,
+            }
+        )
+        if event_name:
+            log_event(
+                events_path,
+                event_name,
+                sample_count=len(annotations),
+                focus_counts=focus_counts,
+                action_counts=action_counts,
+                affect_counts=affect_counts,
+            )
+        return result
+
     try:
         import torch
         import transformers as tf
@@ -366,22 +539,7 @@ def _run_qwen(
                 generated_ids = generated_ids[:, prompt_tokens.shape[1] :]
             decoded = processor.batch_decode(generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True)[0]
             parsed = _extract_json_blob(decoded)
-            annotation = {
-                "timestamp_sec": sample.timestamp_sec,
-                "reason": sample.reason,
-                "raw_text": decoded.strip(),
-                "teacher_focus": str(parsed.get("teacher_focus", "ambiguous")).strip(),
-                "body_action": str(parsed.get("body_action", "ambiguous")).strip(),
-                "affect_tone": str(parsed.get("affect_tone", "ambiguous")).strip(),
-                "posture_signal": str(parsed.get("posture_signal", "ambiguous")).strip(),
-                "attention_note": _sanitize_short_text(parsed.get("attention_note", ""), max_words=12),
-                "evidence_confidence": str(parsed.get("evidence_confidence", "medium")).strip(),
-                "rationale": _sanitize_short_text(parsed.get("rationale", ""), max_words=20),
-            }
-            for field, allowed_values in ALLOWED_QWEN_VALUES.items():
-                if annotation[field] not in allowed_values:
-                    annotation[field] = "ambiguous" if "ambiguous" in allowed_values else "medium"
-            annotations.append(annotation)
+            annotations.append(_build_qwen_annotation(sample, parsed, decoded))
     except Exception as exc:
         result["status"] = "failed"
         result["reason"] = f"Qwen inference failed: {type(exc).__name__}: {exc}"

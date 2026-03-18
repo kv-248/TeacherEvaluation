@@ -1,0 +1,38 @@
+{
+  "sample_count": 8,
+  "sample_timestamps_sec": [
+    0.0,
+    3.0,
+    11.42,
+    18.0,
+    29.96,
+    36.0,
+    48.0,
+    59.67
+  ],
+  "sample_reasons": [
+    "clip_start,uniform_sample,peak_smile_proxy",
+    "low_audience_orientation",
+    "peak_gesture_motion,uniform_sample,peak_posture",
+    "uniform_sample",
+    "clip_midpoint,uniform_sample",
+    "uniform_sample",
+    "uniform_sample",
+    "clip_end"
+  ],
+  "qwen": {
+    "status": "failed",
+    "reason": "Gemini semantic inference failed: RuntimeError: Gemini API HTTP 503: {\n  \"error\": {\n    \"code\": 503,\n    \"message\": \"This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.\",\n    \"status\": \"UNAVAILABLE\"\n  }\n}\n",
+    "aggregate": {}
+  },
+  "sam2": {
+    "status": "skipped",
+    "reason": "SAM2 semantic analysis disabled.",
+    "aggregate": {}
+  },
+  "agreement": {
+    "status": "not_available",
+    "reason": "Qwen semantic output was not available."
+  },
+  "semantic_extensions": {}
+}

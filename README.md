@@ -84,6 +84,24 @@ python run_long_experiment.py \
   --disable-sam2
 ```
 
+Gemini API can also be used as an optional backend for both semantic review and final coaching, which avoids local model downloads. Set a fresh API key in `GEMINI_API_KEY` (or `GOOGLE_API_KEY`) and pass Gemini model names:
+
+```bash
+export GEMINI_API_KEY=your_rotated_key_here
+python run_long_experiment.py \
+  --video samples/Lecture_1_cut_1m_to_5m.mp4 \
+  --start-sec 92.5 \
+  --duration-sec 60 \
+  --analysis-fps 12 \
+  --enable-semantic \
+  --enable-coaching \
+  --qwen-model gemini-2.5-flash \
+  --coach-model gemini-2.5-flash \
+  --disable-sam2
+```
+
+Gemini coaching output is validated against the `feedback_first_v1` report shape and falls back to the deterministic template brief if the response cannot be parsed cleanly.
+
 For a larger Qwen checkpoint that can shard across both A40s, pass a model id such as `Qwen/Qwen2.5-VL-32B-Instruct` with `--qwen-device-map auto`.
 
 Teacher-facing coaching brief with targeted Qwen review and a local synthesis model:
@@ -117,6 +135,17 @@ export TEACHER_EVALUATION_QA_REPORT_JSON=/workspace/TeacherEvaluation/frontend_t
 streamlit run streamlit_app.py
 python frontend_tests/streamlit_smoke.py --app-url http://127.0.0.1:8501
 ```
+
+To use Gemini in the Streamlit frontend without editing code:
+
+```bash
+export GEMINI_API_KEY=your_rotated_key_here
+export TEACHER_EVALUATION_QWEN_MODEL=gemini-2.5-flash
+export TEACHER_EVALUATION_COACH_MODEL=gemini-2.5-flash
+streamlit run streamlit_app.py
+```
+
+Then enable semantic review in the sidebar and turn off template-only coaching if you want the final coaching brief to use Gemini too.
 
 If you want SAM2 outputs as well, pass a local config and checkpoint:
 

@@ -56,6 +56,15 @@ python evaluation/run_validation_batch.py --goldset-only
 
 Runs the existing long evaluation pipeline over the extracted clips, then writes `batch_results.csv` and `batch_summary.md` in the batch output directory. You can filter the manifest with `--clip-ids`, `--priority-tiers`, `--goldset-only`, and `--limit`. If you need the original manifest instead of the reviewed default, pass `--manifest /workspace/TeacherEvaluation/evaluation/validation_manifest.csv`.
 
+### Run a tracked Gemini Flash batch over local clips
+
+```bash
+export GEMINI_API_KEY=your_key_here
+python evaluation/run_local_clips_gemini_batch.py --source-dir /workspace/clips --limit 2
+```
+
+This path is intended for the current Gemini-backed local validation workflow. It registers `/workspace/clips` into the existing `evaluation/local_data/clips/` symlink structure, runs semantic review and coaching with `gemini-2.5-flash`, stores full long-run outputs under `evaluation/local_data/runs/gemini_flash_local/`, and copies only lightweight report artifacts into a tracked batch directory under `evaluation/runtime_batches/`.
+
 ## Expected Order
 
 1. Download videos.

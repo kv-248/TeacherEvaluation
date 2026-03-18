@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import json
 import math
 import re
@@ -11,9 +12,10 @@ import cv2
 import numpy as np
 import pandas as pd
 
+from .gemini_api import generate_gemini_json, is_gemini_model
 from .pipeline import log_event
 from .runtime_config import load_base_thresholds, load_coaching_prompt_config, load_qwen_prompt_config
-from .semantic import SemanticConfig, SemanticSample, _extract_frame_at, _extract_json_blob, _run_qwen
+from .semantic import SemanticConfig, SemanticSample, _extract_frame_at, _run_qwen
 
 
 _BASE_THRESHOLDS = load_base_thresholds()
@@ -52,6 +54,77 @@ COACHING_PROMPT = str(_COACHING_CONFIG["coaching_synthesis"]["prompt"])
 ACTION_TEMPLATES: dict[str, dict[str, str]] = _COACHING_CONFIG["action_templates"]
 STRENGTH_TEMPLATES: dict[str, dict[str, str]] = _COACHING_CONFIG["strength_templates"]
 REPORT_SHAPE_VERSION = "feedback_first_v1"
+
+COACHING_REPORT_SCHEMA = {
+    "type": "object",
+    "required": [
+        "report_shape_version",
+        "executive_summary",
+        "no_material_intervention_needed",
+        "no_material_intervention_needed_reason",
+        "top_strengths",
+        "strength_inventory",
+        "priority_actions",
+        "additional_observation_inventory",
+        "low_confidence_watchlist",
+        "keep_doing",
+        "watch_for",
+        "confidence_notes",
+        "evidence_moments",
+    ],
+    "properties": {
+        "report_shape_version": {"type": "string", "const": REPORT_SHAPE_VERSION},
+        "executive_summary": {"type": "string"},
+        "no_material_intervention_needed": {"type": "boolean"},
+        "no_material_intervention_needed_reason": {"type": "string"},
+        "top_strengths": {"type": "array"},
+        "strength_inventory": {"type": "array"},
+        "priority_actions": {"type": "array"},
+        "additional_observation_inventory": {"type": "array"},
+        "low_confidence_watchlist": {"type": "array"},
+        "keep_doing": {"type": "array"},
+        "watch_for": {"type": "array"},
+        "confidence_notes": {"type": "array"},
+        "evidence_moments": {"type": "array"},
+    },
+}
+COACHING_GEMINI_SYSTEM_INSTRUCTION = (
+    COACHING_PROMPT
+    + "\n\nReturn exactly one JSON object that matches this schema, with no markdown or extra text:\n"
+    + json.dumps(COACHING_REPORT_SCHEMA, indent=2, ensure_ascii=True)
+)
+COACHING_TOP_LEVEL_ALIASES: dict[str, tuple[str, ...]] = {
+    "executive_summary": ("summary", "coach_summary", "overview"),
+    "no_material_intervention_needed": ("no_intervention_needed", "no_action_needed"),
+    "no_material_intervention_needed_reason": ("reason", "rationale", "why"),
+    "top_strengths": ("strengths", "strength_highlights", "top_highlights"),
+    "strength_inventory": ("strengths_inventory", "strength_items"),
+    "priority_actions": ("action_items", "actions", "priority_recommendations", "recommendations"),
+    "additional_observation_inventory": ("additional_observations", "observation_inventory", "observations"),
+    "low_confidence_watchlist": ("watchlist", "watch_items", "low_confidence_items"),
+    "keep_doing": ("continue_doing", "maintain", "keep"),
+    "watch_for": ("watch_items", "watch_next", "monitor"),
+    "confidence_notes": ("reliability_notes", "notes"),
+    "evidence_moments": ("moments", "evidence_cards", "moment_cards"),
+}
+COACHING_ITEM_FIELD_ALIASES: dict[str, tuple[str, ...]] = {
+    "kind": ("category", "type"),
+    "title": ("name", "label"),
+    "evidence": ("what_we_saw", "support", "detail"),
+    "what_to_repeat": ("repeat", "what_to_keep", "how_to_repeat"),
+    "why_it_matters": ("why", "reason"),
+    "what_we_saw": ("observed_behavior", "what_observed", "behavior"),
+    "what_to_try_next": ("what_to_do_next", "next_step", "try_next", "suggested_next_step"),
+    "suggested_response": ("what_to_try_next", "what_to_do_next", "next_step"),
+    "why_watch": ("reason_to_watch", "watch_reason", "why_it_matters"),
+    "what_to_monitor_next": ("what_to_watch", "monitor_next", "what_to_try_next"),
+    "observed_behavior": ("what_we_saw", "behavior"),
+    "metric_evidence": ("metrics", "metric_support"),
+    "qwen_interpretation": ("semantic_interpretation", "qwen_summary", "interpretation"),
+    "coaching_implication": ("implication", "next_step", "suggested_response"),
+    "confidence": ("evidence_confidence", "confidence_level"),
+    "timestamps": ("timestamp", "time", "timecodes", "time_marks"),
+}
 
 
 def build_coaching_artifacts(run_dir: Path) -> CoachingArtifacts:
@@ -1124,24 +1197,15 @@ def _build_evidence_payload(
     }
 
 
-def _coerce_list_of_strings(values: Any, limit: int) -> list[str]:
-    if not isinstance(values, list):
-        return []
-    return [str(value).strip() for value in values if str(value).strip()][:limit]
+def _has_text(value: Any) -> bool:
+    return bool(re.sub(r"\s+", " ", str(value)).strip()) if value is not None else False
 
 
-def _coerce_list_of_dicts(values: Any, fields: list[str], limit: int) -> list[dict[str, Any]]:
-    if not isinstance(values, list):
-        return []
-    out: list[dict[str, Any]] = []
-    for value in values:
-        if not isinstance(value, dict):
-            continue
-        row = {field: value.get(field, "") for field in fields}
-        out.append(row)
-        if len(out) >= limit:
-            break
-    return out
+def _coerce_text(value: Any, default: str = "") -> str:
+    if value is None:
+        return default
+    text = re.sub(r"\s+", " ", str(value)).strip()
+    return text if text else default
 
 
 def _coerce_bool(value: Any) -> bool:
@@ -1150,6 +1214,276 @@ def _coerce_bool(value: Any) -> bool:
     if isinstance(value, str):
         return value.strip().lower() in {"1", "true", "yes"}
     return bool(value)
+
+
+def _coerce_confidence_label(value: Any) -> str:
+    text = _coerce_text(value).lower()
+    if "high" in text:
+        return "high"
+    if "medium" in text or "moderate" in text:
+        return "medium"
+    if "low" in text:
+        return "low"
+    return "medium" if text else "low"
+
+
+def _coerce_kind_label(value: Any) -> str:
+    text = _coerce_text(value).lower()
+    text = re.sub(r"[^a-z0-9]+", "_", text).strip("_")
+    return text or "observation"
+
+
+def _maybe_parse_json_container(value: Any) -> Any:
+    if not isinstance(value, str):
+        return value
+    text = value.strip()
+    if len(text) < 2 or text[0] not in "[{" or text[-1] not in "]}":
+        return value
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+    try:
+        return ast.literal_eval(text)
+    except (SyntaxError, ValueError):
+        return value
+
+
+def _coerce_list_of_strings(values: Any, limit: int) -> list[str]:
+    values = _maybe_parse_json_container(values)
+    if values is None:
+        return []
+    if isinstance(values, str):
+        pieces = [piece.strip() for piece in re.split(r"[\n;]+", values) if piece.strip()]
+        values = pieces or [values]
+    elif not isinstance(values, (list, tuple, set)):
+        values = [values]
+
+    out: list[str] = []
+    for value in values:
+        text = _coerce_text(value)
+        if text:
+            out.append(text)
+        if len(out) >= limit:
+            break
+    return _unique_strings(out)[:limit]
+
+
+def _coerce_timestamp_list(value: Any, limit: int = 6) -> list[str]:
+    value = _maybe_parse_json_container(value)
+    if value is None:
+        return []
+    if isinstance(value, str):
+        if any(sep in value for sep in (",", ";", "\n")):
+            candidates = [piece.strip() for piece in re.split(r"[\n,;]+", value) if piece.strip()]
+        else:
+            candidates = [_coerce_text(value)]
+    elif isinstance(value, (list, tuple, set)):
+        candidates = [_coerce_text(item) for item in value]
+    else:
+        candidates = [_coerce_text(value)]
+    return _unique_strings([item for item in candidates if item])[:limit]
+
+
+def _coerce_list_of_dicts(
+    values: Any,
+    fields: list[str],
+    limit: int,
+    aliases: dict[str, tuple[str, ...]] | None = None,
+) -> list[dict[str, Any]]:
+    values = _maybe_parse_json_container(values)
+    if values is None:
+        return []
+    if isinstance(values, dict):
+        values = [values]
+    if not isinstance(values, (list, tuple, set)):
+        return []
+
+    aliases = aliases or {}
+    out: list[dict[str, Any]] = []
+    for value in values:
+        if not isinstance(value, dict):
+            continue
+        row: dict[str, Any] = {}
+        for field in fields:
+            raw = value.get(field)
+            if raw is None:
+                for alias in aliases.get(field, ()):
+                    if alias in value:
+                        raw = value.get(alias)
+                        break
+            if field == "timestamps":
+                row[field] = _coerce_timestamp_list(raw, limit=6)
+            elif field == "confidence":
+                row[field] = _coerce_confidence_label(raw)
+            elif field == "kind":
+                row[field] = _coerce_kind_label(raw)
+            else:
+                row[field] = _coerce_text(raw)
+        if any(_has_text(row[field]) if field != "timestamps" else bool(row[field]) for field in fields):
+            out.append(row)
+        if len(out) >= limit:
+            break
+    return out
+
+
+def _payload_value(payload: dict[str, Any], field: str) -> Any:
+    for candidate in (field, *COACHING_TOP_LEVEL_ALIASES.get(field, ())):
+        if candidate in payload:
+            return payload[candidate]
+    return None
+
+
+def _unwrap_coaching_payload(parsed: dict[str, Any]) -> dict[str, Any]:
+    if not isinstance(parsed, dict):
+        return {}
+    for wrapper_key in ("report", "output", "data", "result", "payload"):
+        wrapped = parsed.get(wrapper_key)
+        if isinstance(wrapped, dict) and any(key in wrapped for key in ("executive_summary", "priority_actions", "top_strengths", "strength_inventory")):
+            return wrapped
+    return parsed
+
+
+def _build_llm_report(
+    parsed: dict[str, Any],
+    *,
+    source_mode: str,
+    model_name: str | None,
+    evidence: dict[str, Any],
+    config: CoachingConfig,
+) -> dict[str, Any]:
+    payload = _unwrap_coaching_payload(parsed)
+    report = {
+        "source": {
+            "mode": source_mode,
+            "model": model_name,
+        },
+        "report_shape_version": REPORT_SHAPE_VERSION,
+        "executive_summary": _coerce_text(_payload_value(payload, "executive_summary"), ""),
+        "no_material_intervention_needed": _coerce_bool(_payload_value(payload, "no_material_intervention_needed")),
+        "no_material_intervention_needed_reason": _coerce_text(
+            _payload_value(payload, "no_material_intervention_needed_reason"),
+            evidence["no_material_intervention_needed_reason"] if _coerce_bool(_payload_value(payload, "no_material_intervention_needed")) else "",
+        ),
+        "top_strengths": _coerce_list_of_dicts(
+            _payload_value(payload, "top_strengths"),
+            ["title", "evidence", "what_to_repeat", "timestamps", "confidence"],
+            int(_report_shape_thresholds()["top_strength_limit"]),
+            aliases=COACHING_ITEM_FIELD_ALIASES,
+        ),
+        "strength_inventory": _coerce_list_of_dicts(
+            _payload_value(payload, "strength_inventory"),
+            ["title", "evidence", "what_to_repeat", "timestamps", "confidence"],
+            int(_report_shape_thresholds()["strength_inventory_limit"]),
+            aliases=COACHING_ITEM_FIELD_ALIASES,
+        ),
+        "priority_actions": _coerce_list_of_dicts(
+            _payload_value(payload, "priority_actions"),
+            ["title", "why_it_matters", "what_we_saw", "what_to_try_next", "timestamps", "confidence"],
+            max(config.coach_top_actions, 1),
+            aliases=COACHING_ITEM_FIELD_ALIASES,
+        ),
+        "additional_observation_inventory": _coerce_list_of_dicts(
+            _payload_value(payload, "additional_observation_inventory"),
+            ["kind", "title", "evidence", "suggested_response", "timestamps", "confidence"],
+            int(_report_shape_thresholds()["additional_observation_limit"]),
+            aliases=COACHING_ITEM_FIELD_ALIASES,
+        ),
+        "low_confidence_watchlist": _coerce_list_of_dicts(
+            _payload_value(payload, "low_confidence_watchlist"),
+            ["title", "why_watch", "what_we_saw", "what_to_monitor_next", "timestamps", "confidence"],
+            int(_report_shape_thresholds()["watchlist_limit"]),
+            aliases=COACHING_ITEM_FIELD_ALIASES,
+        ),
+        "keep_doing": _coerce_list_of_strings(_payload_value(payload, "keep_doing"), 4),
+        "watch_for": _coerce_list_of_strings(_payload_value(payload, "watch_for"), 4),
+        "confidence_notes": _coerce_list_of_strings(_payload_value(payload, "confidence_notes"), 6),
+        "evidence_moments": _coerce_list_of_dicts(
+            _payload_value(payload, "evidence_moments"),
+            ["timestamp", "headline", "observed_behavior", "metric_evidence", "qwen_interpretation", "coaching_implication"],
+            6,
+            aliases=COACHING_ITEM_FIELD_ALIASES,
+        ),
+    }
+
+    # Keep the report schema-compatible if the model expressed "no material intervention needed"
+    # but omitted the explanation.
+    if report["no_material_intervention_needed"] and not report["no_material_intervention_needed_reason"]:
+        report["no_material_intervention_needed_reason"] = evidence["no_material_intervention_needed_reason"]
+
+    if report["no_material_intervention_needed"]:
+        report["priority_actions"] = []
+
+    report["top_strengths"] = [item for item in report["top_strengths"] if _has_text(item.get("title"))]
+    report["strength_inventory"] = [item for item in report["strength_inventory"] if _has_text(item.get("title"))]
+    report["priority_actions"] = [item for item in report["priority_actions"] if _has_text(item.get("title"))]
+    report["additional_observation_inventory"] = [
+        item for item in report["additional_observation_inventory"] if _has_text(item.get("title"))
+    ]
+    report["low_confidence_watchlist"] = [item for item in report["low_confidence_watchlist"] if _has_text(item.get("title"))]
+    report["evidence_moments"] = [
+        item for item in report["evidence_moments"] if _has_text(item.get("timestamp")) and _has_text(item.get("headline"))
+    ]
+    report["keep_doing"] = _unique_strings(report["keep_doing"])
+    report["watch_for"] = _unique_strings(report["watch_for"])
+    report["confidence_notes"] = _unique_strings(report["confidence_notes"])
+
+    return report
+
+
+def _validate_llm_report(report: dict[str, Any]) -> bool:
+    if not _has_text(report.get("executive_summary")):
+        return False
+    if report.get("no_material_intervention_needed") and not _has_text(report.get("no_material_intervention_needed_reason")):
+        return False
+    if not report.get("no_material_intervention_needed") and not report.get("priority_actions"):
+        return False
+    if report.get("report_shape_version") != REPORT_SHAPE_VERSION:
+        return False
+    return True
+
+
+def _merge_llm_report_with_fallback(
+    llm_report: dict[str, Any],
+    *,
+    evidence: dict[str, Any],
+    config: CoachingConfig,
+    model_name: str,
+) -> dict[str, Any]:
+    merged = _fallback_report(evidence, config)
+    merged["source"] = {
+        "mode": "llm_api_hybrid",
+        "model": model_name,
+    }
+    merged["report_shape_version"] = REPORT_SHAPE_VERSION
+
+    if _has_text(llm_report.get("executive_summary")):
+        merged["executive_summary"] = llm_report["executive_summary"]
+    if llm_report.get("top_strengths"):
+        merged["top_strengths"] = llm_report["top_strengths"]
+    if llm_report.get("strength_inventory"):
+        merged["strength_inventory"] = llm_report["strength_inventory"]
+    if llm_report.get("priority_actions"):
+        merged["priority_actions"] = llm_report["priority_actions"]
+    if llm_report.get("additional_observation_inventory"):
+        merged["additional_observation_inventory"] = llm_report["additional_observation_inventory"]
+    if llm_report.get("low_confidence_watchlist"):
+        merged["low_confidence_watchlist"] = llm_report["low_confidence_watchlist"]
+    if llm_report.get("keep_doing"):
+        merged["keep_doing"] = llm_report["keep_doing"]
+    if llm_report.get("watch_for"):
+        merged["watch_for"] = llm_report["watch_for"]
+    if llm_report.get("confidence_notes"):
+        merged["confidence_notes"] = llm_report["confidence_notes"]
+    if llm_report.get("evidence_moments"):
+        merged["evidence_moments"] = llm_report["evidence_moments"]
+
+    if llm_report.get("no_material_intervention_needed") and _has_text(llm_report.get("no_material_intervention_needed_reason")):
+        merged["no_material_intervention_needed"] = True
+        merged["no_material_intervention_needed_reason"] = llm_report["no_material_intervention_needed_reason"]
+        merged["priority_actions"] = []
+
+    return merged
 
 
 def _fallback_report(evidence: dict[str, Any], config: CoachingConfig) -> dict[str, Any]:
@@ -1240,31 +1574,6 @@ def _run_coach_llm(evidence: dict[str, Any], config: CoachingConfig, events_path
     if config.coach_fallback_template_only:
         return None
 
-    try:
-        import torch
-        from transformers import AutoModelForCausalLM, AutoTokenizer
-    except Exception as exc:
-        log_event(events_path, "coaching_llm_unavailable", reason=f"Missing text-model deps: {type(exc).__name__}: {exc}")
-        return None
-
-    device = config.coach_device
-    if device.startswith("cuda") and not torch.cuda.is_available():
-        device = "cpu"
-    torch_dtype = torch.bfloat16 if device.startswith("cuda") else torch.float32
-
-    try:
-        tokenizer = AutoTokenizer.from_pretrained(config.coach_model, trust_remote_code=True)
-        model = AutoModelForCausalLM.from_pretrained(
-            config.coach_model,
-            torch_dtype=torch_dtype,
-            low_cpu_mem_usage=True,
-            trust_remote_code=True,
-        ).to(device)
-        model.eval()
-    except Exception as exc:
-        log_event(events_path, "coaching_llm_load_failed", reason=f"{type(exc).__name__}: {exc}", model=config.coach_model)
-        return None
-
     prompt_payload = {
         "report_shape_version": REPORT_SHAPE_VERSION,
         "overall_profile": evidence["overall_profile"],
@@ -1299,6 +1608,70 @@ def _run_coach_llm(evidence: dict[str, Any], config: CoachingConfig, events_path
         "top_action_count": config.coach_top_actions,
     }
     prompt_json = json.dumps(prompt_payload, indent=2, ensure_ascii=True)
+
+    if is_gemini_model(config.coach_model):
+        try:
+            parsed, _raw_text = generate_gemini_json(
+                model_name=config.coach_model,
+                system_instruction=COACHING_GEMINI_SYSTEM_INSTRUCTION,
+                user_text=prompt_json,
+                max_output_tokens=1600,
+                temperature=0.0,
+                response_json_schema=COACHING_REPORT_SCHEMA,
+            )
+        except Exception as exc:
+            log_event(events_path, "coaching_llm_inference_failed", reason=f"{type(exc).__name__}: {exc}", model=config.coach_model)
+            return None
+
+        report = _build_llm_report(
+            parsed,
+            source_mode="llm_api",
+            model_name=config.coach_model,
+            evidence=evidence,
+            config=config,
+        )
+        if not _validate_llm_report(report):
+            hybrid = _merge_llm_report_with_fallback(
+                report,
+                evidence=evidence,
+                config=config,
+                model_name=config.coach_model,
+            )
+            log_event(
+                events_path,
+                "coaching_llm_partial_output",
+                reason="Schema-valid Gemini output did not satisfy feedback_first_v1 validation; merged onto deterministic fallback.",
+                model=config.coach_model,
+            )
+            return hybrid
+        log_event(events_path, "coaching_llm_completed", model=config.coach_model, action_count=len(report["priority_actions"]))
+        return report
+
+    try:
+        import torch
+        from transformers import AutoModelForCausalLM, AutoTokenizer
+    except Exception as exc:
+        log_event(events_path, "coaching_llm_unavailable", reason=f"Missing text-model deps: {type(exc).__name__}: {exc}")
+        return None
+
+    device = config.coach_device
+    if device.startswith("cuda") and not torch.cuda.is_available():
+        device = "cpu"
+    torch_dtype = torch.bfloat16 if device.startswith("cuda") else torch.float32
+
+    try:
+        tokenizer = AutoTokenizer.from_pretrained(config.coach_model, trust_remote_code=True)
+        model = AutoModelForCausalLM.from_pretrained(
+            config.coach_model,
+            torch_dtype=torch_dtype,
+            low_cpu_mem_usage=True,
+            trust_remote_code=True,
+        ).to(device)
+        model.eval()
+    except Exception as exc:
+        log_event(events_path, "coaching_llm_load_failed", reason=f"{type(exc).__name__}: {exc}", model=config.coach_model)
+        return None
+
     messages = [
         {"role": "system", "content": COACHING_PROMPT},
         {"role": "user", "content": prompt_json},
@@ -1322,7 +1695,8 @@ def _run_coach_llm(evidence: dict[str, Any], config: CoachingConfig, events_path
         decoded = tokenizer.batch_decode(generated, skip_special_tokens=True, clean_up_tokenization_spaces=True)[0]
         parsed = _extract_json_blob(decoded)
     except Exception as exc:
-        log_event(events_path, "coaching_llm_inference_failed", reason=f"{type(exc).__name__}: {exc}", model=config.coach_model)
+        event_name = "coaching_llm_invalid_output" if isinstance(exc, (json.JSONDecodeError, ValueError)) else "coaching_llm_inference_failed"
+        log_event(events_path, event_name, reason=f"{type(exc).__name__}: {exc}", model=config.coach_model)
         return None
     finally:
         try:
@@ -1332,56 +1706,14 @@ def _run_coach_llm(evidence: dict[str, Any], config: CoachingConfig, events_path
         except Exception:
             pass
 
-    report = {
-        "source": {
-            "mode": "llm",
-            "model": config.coach_model,
-        },
-        "report_shape_version": REPORT_SHAPE_VERSION,
-        "executive_summary": str(parsed.get("executive_summary", "")).strip(),
-        "no_material_intervention_needed": _coerce_bool(parsed.get("no_material_intervention_needed")),
-        "no_material_intervention_needed_reason": str(parsed.get("no_material_intervention_needed_reason", "")).strip(),
-        "top_strengths": _coerce_list_of_dicts(
-            parsed.get("top_strengths"),
-            ["title", "evidence", "what_to_repeat", "timestamps", "confidence"],
-            int(_report_shape_thresholds()["top_strength_limit"]),
-        ),
-        "strength_inventory": _coerce_list_of_dicts(
-            parsed.get("strength_inventory"),
-            ["title", "evidence", "what_to_repeat", "timestamps", "confidence"],
-            int(_report_shape_thresholds()["strength_inventory_limit"]),
-        ),
-        "priority_actions": _coerce_list_of_dicts(
-            parsed.get("priority_actions"),
-            ["title", "why_it_matters", "what_we_saw", "what_to_try_next", "timestamps", "confidence"],
-            max(config.coach_top_actions, 1),
-        ),
-        "additional_observation_inventory": _coerce_list_of_dicts(
-            parsed.get("additional_observation_inventory"),
-            ["kind", "title", "evidence", "suggested_response", "timestamps", "confidence"],
-            int(_report_shape_thresholds()["additional_observation_limit"]),
-        ),
-        "low_confidence_watchlist": _coerce_list_of_dicts(
-            parsed.get("low_confidence_watchlist"),
-            ["title", "why_watch", "what_we_saw", "what_to_monitor_next", "timestamps", "confidence"],
-            int(_report_shape_thresholds()["watchlist_limit"]),
-        ),
-        "keep_doing": _coerce_list_of_strings(parsed.get("keep_doing"), 4),
-        "watch_for": _coerce_list_of_strings(parsed.get("watch_for"), 4),
-        "confidence_notes": _coerce_list_of_strings(parsed.get("confidence_notes"), 6),
-        "evidence_moments": _coerce_list_of_dicts(
-            parsed.get("evidence_moments"),
-            ["timestamp", "headline", "observed_behavior", "metric_evidence", "qwen_interpretation", "coaching_implication"],
-            6,
-        ),
-    }
-    if not report["executive_summary"]:
-        log_event(events_path, "coaching_llm_invalid_output", model=config.coach_model)
-        return None
-    if report["no_material_intervention_needed"] and not report["no_material_intervention_needed_reason"]:
-        log_event(events_path, "coaching_llm_invalid_output", model=config.coach_model)
-        return None
-    if not report["no_material_intervention_needed"] and not report["priority_actions"]:
+    report = _build_llm_report(
+        parsed,
+        source_mode="llm",
+        model_name=config.coach_model,
+        evidence=evidence,
+        config=config,
+    )
+    if not _validate_llm_report(report):
         log_event(events_path, "coaching_llm_invalid_output", model=config.coach_model)
         return None
     log_event(events_path, "coaching_llm_completed", model=config.coach_model, action_count=len(report["priority_actions"]))

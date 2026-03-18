@@ -24,6 +24,7 @@ VIDEOS_ROOT = LOCAL_DATA_ROOT / "videos"
 CLIPS_ROOT = LOCAL_DATA_ROOT / "clips"
 RUNS_ROOT = LOCAL_DATA_ROOT / "runs"
 BATCHES_ROOT = LOCAL_DATA_ROOT / "batches"
+RUNTIME_BATCHES_ROOT = REPO_ROOT / "evaluation" / "runtime_batches"
 
 REQUIRED_MANIFEST_COLUMNS = {
     "clip_id",
