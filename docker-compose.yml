@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+  # The web UI service
+  streamlit:
+    build: .
+    ports:
+      - "8501:8501"
+    volumes:
+      - .:/app
+    environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+    command: streamlit run streamlit_app.py --server.address=0.0.0.0
+
+  # An automated batch evaluator service you can trigger
+  # Usage: docker compose run evaluator --clip-ids crashcourse_moon_phases
+  evaluator:
+    build: .
+    volumes:
+      - .:/app
+    environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+    entrypoint: ["python", "evaluation/run_local_clips_gemini_batch.py"]
+    # Provide default test clips if none are passed
+    command: ["--clip-ids", "crashcourse_moon_phases,harvard_mba_case_classroom,studyiq_shah_bano_case", "--output-dir", "evaluation/runtime_batches/docker_run"]

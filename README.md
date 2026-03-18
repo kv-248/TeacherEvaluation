@@ -53,7 +53,24 @@ The long-run runner can now emit a separate coaching artifact set:
 - sample video:
   - `samples/Lecture_1_cut_1m_to_5m.mp4`
 
-## Run
+## Docker (Recommended)
+
+The easiest way to run the pipeline is via Docker Compose. All dependencies (including OpenCV's system packages and WeasyPrint for PDF generation) are handled automatically.
+
+1. Ensure your Gemini API key is in your environment:
+   ```bash
+   export GEMINI_API_KEY=your_rotated_key_here
+   ```
+2. Start the interactive Streamlit UI (available at http://localhost:8501):
+   ```bash
+   docker compose up streamlit
+   ```
+3. Or run a headless evaluation batch across the included `clips/`:
+   ```bash
+   docker compose run evaluator --clip-ids crashcourse_moon_phases,harvard_mba_case_classroom
+   ```
+
+## Manual Run
 
 Install Python dependencies:
 
@@ -80,8 +97,7 @@ python run_long_experiment.py \
   --analysis-fps 12 \
   --enable-semantic \
   --semantic-model gemini-2.5-flash \
-  --coach-model gemini-2.5-flash \
-  --disable-sam2
+  --coach-model gemini-2.5-flash
 ```
 
 This is the recommended path for this repo. It avoids local heavy-model downloads and uses the Gemini API for both frame-level semantic review and final coaching synthesis.
@@ -126,18 +142,6 @@ streamlit run streamlit_app.py
 
 Then enable semantic review in the sidebar and turn off template-only coaching if you want the final coaching brief to use Gemini too.
 
-If you want SAM2 outputs as well, pass a local config and checkpoint:
-
-```bash
-python run_long_experiment.py \
-  --video samples/Lecture_1_cut_1m_to_5m.mp4 \
-  --start-sec 92.5 \
-  --duration-sec 60 \
-  --analysis-fps 12 \
-  --enable-semantic \
-  --sam2-model-cfg <sam2_config.yaml> \
-  --sam2-checkpoint <sam2_checkpoint.pt>
-```
 
 To regenerate the report figures and PDF:
 
