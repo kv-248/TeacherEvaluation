@@ -7,21 +7,21 @@
 - Window size: `15.0s`, step `15.0s`
 - Semantic model: `gemini-2.5-flash`
 - Coaching model: `gemini-2.5-flash`
-- Selected clips: `20`
+- Selected clips: `23`
 
 ## Status Counts
 
 | run_status | count |
 | --- | --- |
-| ok | 20 |
+| ok | 23 |
 
 ## Score Summary
 
 | metric | count | mean | min | max |
 | --- | --- | --- | --- | --- |
-| overall_score | 20 | 50.54 | 29.31 | 63.44 |
-| audience_score | 20 | 63.64 | 14.25 | 88.48 |
-| alertness_score | 20 | 76.13 | 43.13 | 90.99 |
+| overall_score | 23 | 50.45 | 29.31 | 63.44 |
+| audience_score | 23 | 63.51 | 14.25 | 88.48 |
+| alertness_score | 23 | 76.75 | 43.13 | 90.99 |
 
 ## Top 5
 
@@ -40,8 +40,8 @@
 | mit_ocw_linear_eq_180_240 | 29.31 | llm_api | 0 | mit ocw linear eq 180 240 |
 | stanford_hbb_300_360 | 37.97 | llm_api | 3 | stanford hbb 300 360 |
 | mit_ocw_aero_300_360 | 38.29 | llm_api_hybrid | 3 | mit ocw aero 300 360 |
+| yale_quantum_240_300 | 41.63 | llm_api_hybrid | 2 | yale quantum 240 300 |
 | mit_ocw_microecon_180_240 | 46.40 | llm_api | 0 | mit ocw microecon 180 240 |
-| cs50_business_150_210 | 46.57 | llm_api_hybrid | 3 | cs50 business 150 210 |
 
 ## Completed Clip Tracker
 
@@ -67,3 +67,6 @@
 | yale_finance_240_300 | completed | llm_api_hybrid | 2 | Hand visibility drops in parts of the clip, so gesture labels are less certain. |  |
 | yale_linguistics_180_240 | completed | llm_api_hybrid | 1 | Face coverage dropped below 95%; audience orientation and facial scores are les… |  |
 | yale_newtonian_240_300 | completed | llm_api | 2 | Face coverage dropped below 95%; audience orientation and facial scores are les… |  |
+| yale_power_politics_180_240 | completed | llm_api | 0 |  |  |
+| yale_quantum_240_300 | completed | llm_api_hybrid | 2 | Face visibility is limited in parts of the clip, so eye-contact and facial-tone… |  |
+| yale_rome_180_240 | completed | llm_api_hybrid | 2 | ["Hand visibility drops in parts of the clip, so gesture labels are less certai… |  |

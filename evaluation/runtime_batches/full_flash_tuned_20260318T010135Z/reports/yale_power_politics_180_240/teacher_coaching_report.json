@@ -1,0 +1,19 @@
+{
+  "source": {
+    "mode": "llm_api",
+    "model": "gemini-2.5-flash"
+  },
+  "report_shape_version": "feedback_first_v1",
+  "executive_summary": "This report highlights strengths in maintaining an alert and confident presence with distributed room engagement. Areas to watch include the size of gestures, maintaining an open stance, and ensuring consistent audience orientation and room scanning. The overall evidence quality is low, so these are areas for observation rather than immediate intervention.",
+  "no_material_intervention_needed": true,
+  "no_material_intervention_needed_reason": "Evidence quality is too limited to justify corrective feedback in this clip.",
+  "top_strengths": [],
+  "strength_inventory": [],
+  "priority_actions": [],
+  "additional_observation_inventory": [],
+  "low_confidence_watchlist": [],
+  "keep_doing": [],
+  "watch_for": [],
+  "confidence_notes": [],
+  "evidence_moments": []
+}

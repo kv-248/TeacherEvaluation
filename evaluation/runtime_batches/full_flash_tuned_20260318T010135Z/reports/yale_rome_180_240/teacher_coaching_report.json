@@ -1,0 +1,171 @@
+{
+  "source": {
+    "mode": "llm_api_hybrid",
+    "model": "gemini-2.5-flash"
+  },
+  "report_shape_version": "feedback_first_v1",
+  "executive_summary": "The teacher demonstrates strong presence and alertness. Key areas for growth include refining gesture size to match emphasis and ensuring a more deliberate, even room scan. Additionally, reducing extended note-reading and softening facial tone could enhance connection.",
+  "no_material_intervention_needed": false,
+  "no_material_intervention_needed_reason": "",
+  "top_strengths": [
+    {
+      "title": "Alert room presence",
+      "evidence": "00:00-00:15 kept the head and eyes visibly engaged with the room. 00:15-00:30 kept the head and eyes visibly engaged with the room.",
+      "what_to_repeat": "Keep the same quick room checks that make the lecture feel attentive.",
+      "timestamps": [
+        "00:00-00:15",
+        "00:15-00:30",
+        "00:30-00:45",
+        "00:45-01:00"
+      ],
+      "confidence": "medium"
+    },
+    {
+      "title": "Upright confident presence",
+      "evidence": "00:00-00:15 held an upright, settled stance rather than a collapsed or guarded one. 00:15-00:30 held an upright, settled stance rather than a collapsed or guarded one.",
+      "what_to_repeat": "Keep the same upright, settled stance between points and transitions.",
+      "timestamps": [
+        "00:00-00:15",
+        "00:15-00:30",
+        "00:30-00:45",
+        "00:45-01:00"
+      ],
+      "confidence": "medium"
+    }
+  ],
+  "strength_inventory": [
+    {
+      "title": "Alert room presence",
+      "evidence": "00:00-00:15 kept the head and eyes visibly engaged with the room. 00:15-00:30 kept the head and eyes visibly engaged with the room.",
+      "what_to_repeat": "Keep the same quick room checks that make the lecture feel attentive.",
+      "timestamps": [
+        "00:00-00:15",
+        "00:15-00:30",
+        "00:30-00:45",
+        "00:45-01:00"
+      ],
+      "confidence": "medium"
+    },
+    {
+      "title": "Upright confident presence",
+      "evidence": "00:00-00:15 held an upright, settled stance rather than a collapsed or guarded one. 00:15-00:30 held an upright, settled stance rather than a collapsed or guarded one.",
+      "what_to_repeat": "Keep the same upright, settled stance between points and transitions.",
+      "timestamps": [
+        "00:00-00:15",
+        "00:15-00:30",
+        "00:30-00:45",
+        "00:45-01:00"
+      ],
+      "confidence": "medium"
+    }
+  ],
+  "priority_actions": [
+    {
+      "title": "Tighten the peak size of gestures",
+      "why_it_matters": "Large bursts of motion can distract from the teaching point when they are not tightly timed.",
+      "what_we_saw": "00:00-00:15 had gesture peaks that looked larger than the teaching point required. 00:15-00:30 had gesture peaks that looked larger than the teaching point required.",
+      "what_to_try_next": "Keep big gestures for true emphasis and use smaller controlled hand movements elsewhere.",
+      "timestamps": [
+        "00:00-00:15",
+        "00:15-00:30",
+        "00:30-00:45"
+      ],
+      "confidence": "medium"
+    },
+    {
+      "title": "Deliberately sweep the room",
+      "why_it_matters": "More even attention across the room helps students feel included and keeps engagement distributed.",
+      "what_we_saw": "00:00-00:15 stayed more fixed on one part of the room than on a left-center-right sweep. 00:15-00:30 stayed more fixed on one part of the room than on a left-center-right sweep.",
+      "what_to_try_next": "At each major point, pause and sweep left-center-right before moving on.",
+      "timestamps": [
+        "00:00-00:15",
+        "00:15-00:30"
+      ],
+      "confidence": "medium"
+    }
+  ],
+  "additional_observation_inventory": [
+    {
+      "kind": "watch_item",
+      "title": "Soften the visible facial tone",
+      "evidence": "00:30-00:45 showed a flatter or tighter visible facial tone than the rest of the clip.",
+      "suggested_response": "Check whether the face resets between points instead of staying tight through the whole sentence.",
+      "timestamps": [
+        "00:30-00:45"
+      ],
+      "confidence": "medium"
+    },
+    {
+      "kind": "watch_item",
+      "title": "Reduce extended note-reading",
+      "evidence": "00:30-00:45 repeatedly pulled attention down to notes instead of back to the room.",
+      "suggested_response": "Check whether note glances stay brief and return to the room within the same teaching beat.",
+      "timestamps": [
+        "00:30-00:45"
+      ],
+      "confidence": "medium"
+    }
+  ],
+  "low_confidence_watchlist": [
+    {
+      "title": "Soften the visible facial tone",
+      "why_watch": "The signal is visible, but it is not yet sustained enough to justify real corrective feedback.",
+      "what_we_saw": "00:30-00:45 showed a flatter or tighter visible facial tone than the rest of the clip.",
+      "what_to_monitor_next": "Check whether the face resets between points instead of staying tight through the whole sentence.",
+      "timestamps": [
+        "00:30-00:45"
+      ],
+      "confidence": "medium"
+    },
+    {
+      "title": "Reduce extended note-reading",
+      "why_watch": "The signal is visible, but it is not yet sustained enough to justify real corrective feedback.",
+      "what_we_saw": "00:30-00:45 repeatedly pulled attention down to notes instead of back to the room.",
+      "what_to_monitor_next": "Check whether note glances stay brief and return to the room within the same teaching beat.",
+      "timestamps": [
+        "00:30-00:45"
+      ],
+      "confidence": "medium"
+    }
+  ],
+  "keep_doing": [
+    "Keep the same quick room checks that make the lecture feel attentive.",
+    "Keep the same upright, settled stance between points and transitions."
+  ],
+  "watch_for": [
+    "Check whether gesture size matches the importance of the point instead of peaking on routine lines.",
+    "Check whether the next explanation visibly reaches more than one side of the room.",
+    "Check whether the face resets between points instead of staying tight through the whole sentence.",
+    "Check whether note glances stay brief and return to the room within the same teaching beat."
+  ],
+  "confidence_notes": [
+    "[\"Hand visibility drops in parts of the clip, so gesture labels are less certain.\", \"Face coverage dropped below 95%",
+    "audience orientation and facial scores are less stable.\", \"Hand coverage dropped"
+  ],
+  "evidence_moments": [
+    {
+      "timestamp": "00:00-00:15",
+      "headline": "Uneven Room Scan",
+      "observed_behavior": "uneven room scan / over animated delivery / open palm explaining",
+      "metric_evidence": "Overall 50.6; room scan 50.1; presence 80.5; natural movement 24.9.",
+      "qwen_interpretation": "Qwen sees the teacher mainly addressing the audience; open-palm explanatory gestures recur; stance is often static.",
+      "coaching_implication": "At each major point, pause and sweep left-center-right before moving on."
+    },
+    {
+      "timestamp": "00:45-01:00",
+      "headline": "Distributed Room Engagement",
+      "observed_behavior": "upright confident presence / alert room presence / distributed room engagement",
+      "metric_evidence": "Overall 64.9; room scan 60.3; presence 90.5; natural movement 61.9.",
+      "qwen_interpretation": "Qwen sees the teacher mainly addressing the audience; stance is often static.",
+      "coaching_implication": "Reuse the left-center-right room sweep that already looks natural."
+    },
+    {
+      "timestamp": "00:30-00:45",
+      "headline": "Note Reading",
+      "observed_behavior": "over animated delivery / tense or neutral affect / note reading",
+      "metric_evidence": "Overall 54.3; room scan 66.3; presence 88.1; natural movement 18.4.",
+      "qwen_interpretation": "Qwen sees repeated note-reading or notes-focused attention; stance is often static; posture looks closed or slouched in several samples.",
+      "coaching_implication": "Raise notes closer to eye level and rehearse short glance-return cycles during key explanations."
+    }
+  ]
+}
