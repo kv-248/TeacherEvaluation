@@ -573,7 +573,7 @@ def _summarize_qwen_window(qwen_annotations: list[dict[str, Any]]) -> dict[str, 
     if not qwen_annotations:
         return {
             "status": "not_available",
-            "summary": "No targeted Qwen interpretation was available for this review window.",
+            "summary": "No targeted semantic interpretation was available for this review window.",
             "aggregate": {},
             "annotations": [],
         }
@@ -589,11 +589,11 @@ def _summarize_qwen_window(qwen_annotations: list[dict[str, Any]]) -> dict[str, 
 
     summary_parts: list[str] = []
     if ratio(focus_counts, "notes") >= 0.5 or ratio(action_counts, "reading_from_notes") >= 0.5:
-        summary_parts.append("Qwen sees repeated note-reading or notes-focused attention")
+        summary_parts.append("Semantic review suggests repeated note-reading or notes-focused attention")
     elif ratio(focus_counts, "audience") >= 0.5:
-        summary_parts.append("Qwen sees the teacher mainly addressing the audience")
+        summary_parts.append("Semantic review suggests the teacher is mainly addressing the audience")
     elif ratio(focus_counts, "board") + ratio(focus_counts, "screen") >= 0.5:
-        summary_parts.append("Qwen sees the teacher mainly oriented to board or screen content")
+        summary_parts.append("Semantic review suggests the teacher is mainly oriented to board or screen content")
 
     if ratio(action_counts, "open_palm_explaining") >= 0.5:
         summary_parts.append("open-palm explanatory gestures recur")
@@ -622,7 +622,7 @@ def _summarize_qwen_window(qwen_annotations: list[dict[str, Any]]) -> dict[str, 
     }
     return {
         "status": "completed",
-        "summary": "; ".join(summary_parts) + "." if summary_parts else "Qwen window review returned mixed or ambiguous evidence.",
+        "summary": "; ".join(summary_parts) + "." if summary_parts else "Semantic window review returned mixed or ambiguous evidence.",
         "aggregate": aggregate,
         "annotations": qwen_annotations,
     }
@@ -901,6 +901,15 @@ def _draft_action_candidates(
             evidence_text=_action_evidence_summary("note_reading", {"window_label": window["window_label"]}),
         )
 
+    def _clip_aware_what_we_saw(bucket: dict[str, Any], avg_sev: float) -> str:
+        parts = bucket["evidence_parts"][:2]
+        base = " ".join(parts)
+        if avg_sev >= 60:
+            base += f" This pattern was consistent and strong (severity {avg_sev:.0f}/100)."
+        elif avg_sev >= 40:
+            base += f" This appeared across multiple windows (severity {avg_sev:.0f}/100)."
+        return base
+
     action_candidates: list[dict[str, Any]] = []
     for tag, bucket in grouped.items():
         timestamps = _unique_strings(bucket["timestamps"])
@@ -922,7 +931,7 @@ def _draft_action_candidates(
                 "tag": tag,
                 "title": template["title"],
                 "why_it_matters": template["why"],
-                "what_we_saw": " ".join(bucket["evidence_parts"][:2]),
+                "what_we_saw": _clip_aware_what_we_saw(bucket, avg_severity),
                 "what_to_try_next": template["try"],
                 "what_to_monitor_next": _watch_monitor_hint(tag),
                 "timestamps": timestamps,
@@ -1940,7 +1949,7 @@ def _render_markdown(report: dict[str, Any], evidence: dict[str, Any], artifacts
             [
                 f"- Observed behavior: {card['observed_behavior']}",
                 f"- Metric evidence: {card['metric_evidence']}",
-                f"- Qwen interpretation: {card['qwen_interpretation']}",
+                f"- Semantic interpretation: {card['qwen_interpretation']}",
                 f"- Coaching implication: {card['coaching_implication']}",
                 "",
             ]
@@ -2142,7 +2151,7 @@ def run_coaching_report(
             for window in review_windows:
                 window["qwen"] = {
                     "status": qwen_result.get("status", "not_available"),
-                    "summary": qwen_result.get("reason", "Targeted Qwen interpretation was not available for this window."),
+                    "summary": qwen_result.get("reason", "Targeted semantic interpretation was not available for this window."),
                     "aggregate": {},
                     "annotations": [],
                 }
@@ -2157,7 +2166,7 @@ def run_coaching_report(
         for window in review_windows:
             window["qwen"] = {
                 "status": "not_available",
-                "summary": "Targeted Qwen interpretation was not run for this window.",
+                "summary": "Targeted semantic interpretation was not run for this window.",
                 "aggregate": {},
                 "annotations": [],
             }

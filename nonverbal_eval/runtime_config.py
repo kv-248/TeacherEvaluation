@@ -124,7 +124,7 @@ DEFAULT_BASE_THRESHOLDS: dict[str, Any] = {
 DEFAULT_QWEN_PROMPTS: dict[str, Any] = {
     "version": "0.2.0",
     "frame_semantic_review": {
-        "model": "Qwen/Qwen2.5-VL-7B-Instruct",
+        "model": "gemini-2.5-flash",
         "temperature": 0.1,
         "max_new_tokens": 180,
         "prompt": (
@@ -146,7 +146,7 @@ DEFAULT_QWEN_PROMPTS: dict[str, Any] = {
 DEFAULT_COACHING_PROMPTS: dict[str, Any] = {
     "version": "0.3.0",
     "coaching_synthesis": {
-        "model": "Qwen/Qwen2.5-3B-Instruct",
+        "model": "gemini-2.5-flash",
         "fallback": "template",
         "prompt": (
             "You are a teacher coach writing concise, practical feedback from structured nonverbal evidence.\n"

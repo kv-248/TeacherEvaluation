@@ -21,7 +21,8 @@ UPLOAD_ROOT = WORK_ROOT / "uploads"
 RUN_ROOT = WORK_ROOT / "runs"
 QA_REPORT_JSON_ENV = "TEACHER_EVALUATION_QA_REPORT_JSON"
 QA_REPORT_PDF_ENV = "TEACHER_EVALUATION_QA_REPORT_PDF"
-SEMANTIC_MODEL_ENV = "TEACHER_EVALUATION_QWEN_MODEL"
+SEMANTIC_MODEL_ENV = "TEACHER_EVALUATION_SEMANTIC_MODEL"
+LEGACY_SEMANTIC_MODEL_ENV = "TEACHER_EVALUATION_QWEN_MODEL"
 COACH_MODEL_ENV = "TEACHER_EVALUATION_COACH_MODEL"
 
 STAGE_LABELS = {
@@ -81,6 +82,14 @@ def _load_json(path: str | Path | None) -> dict[str, Any] | None:
     if not file_path.exists():
         return None
     return json.loads(file_path.read_text(encoding="utf-8"))
+
+
+def _semantic_model_name(default: str = "gemini-2.5-flash") -> str:
+    return (
+        os.getenv(SEMANTIC_MODEL_ENV)
+        or os.getenv(LEGACY_SEMANTIC_MODEL_ENV)
+        or default
+    )
 
 
 def _as_timestamps(value: Any) -> list[str]:
@@ -205,7 +214,7 @@ def _build_markdown_report(report: dict[str, Any]) -> str:
                     "",
                     f"- Observed behavior: {moment.get('observed_behavior', '')}",
                     f"- Metric evidence: {moment.get('metric_evidence', '')}",
-                    f"- Qwen interpretation: {moment.get('qwen_interpretation', '')}",
+                    f"- Semantic interpretation: {moment.get('qwen_interpretation', '')}",
                     f"- Coaching implication: {moment.get('coaching_implication', '')}",
                     "",
                 ]
@@ -220,75 +229,34 @@ def _build_markdown_report(report: dict[str, Any]) -> str:
 
 
 def _render_downloads_from_report(report: dict[str, Any]) -> None:
-    public_report = {key: value for key, value in report.items() if not str(key).startswith("_")}
-    json_bytes = json.dumps(public_report, indent=2, ensure_ascii=True).encode("utf-8")
-    md_bytes = _build_markdown_report(public_report).encode("utf-8")
     pdf_path = report.get("_qa_pdf_path")
 
-    col1, col2, col3 = st.columns(3)
-    with col1:
+    if pdf_path and Path(str(pdf_path)).exists():
+        pdf_file = Path(str(pdf_path))
         st.download_button(
-            "Download JSON",
-            data=json_bytes,
-            file_name="teacher_coaching_report.json",
-            mime="application/json",
+            "Download PDF",
+            data=pdf_file.read_bytes(),
+            file_name=pdf_file.name,
+            mime="application/pdf",
             use_container_width=True,
         )
-    with col2:
-        st.download_button(
-            "Download Markdown",
-            data=md_bytes,
-            file_name="teacher_coaching_report.md",
-            mime="text/markdown",
-            use_container_width=True,
-        )
-    with col3:
-        if pdf_path and Path(str(pdf_path)).exists():
-            pdf_file = Path(str(pdf_path))
-            st.download_button(
-                "Download PDF",
-                data=pdf_file.read_bytes(),
-                file_name=pdf_file.name,
-                mime="application/pdf",
-                use_container_width=True,
-            )
-        else:
-            st.button("PDF unavailable", disabled=True, use_container_width=True)
+    else:
+        st.button("PDF unavailable", disabled=True, use_container_width=True)
 
 
 def _report_downloads(report_artifacts: dict[str, Any]) -> None:
-    json_path = Path(report_artifacts["report_json"])
-    md_path = Path(report_artifacts["report_md"])
     pdf_path = Path(report_artifacts["report_pdf"])
 
-    col1, col2, col3 = st.columns(3)
-    with col1:
+    if pdf_path.exists():
         st.download_button(
-            "Download JSON",
-            data=json_path.read_bytes(),
-            file_name=json_path.name,
-            mime="application/json",
+            "Download PDF",
+            data=pdf_path.read_bytes(),
+            file_name=pdf_path.name,
+            mime="application/pdf",
             use_container_width=True,
         )
-    with col2:
-        st.download_button(
-            "Download Markdown",
-            data=md_path.read_bytes(),
-            file_name=md_path.name,
-            mime="text/markdown",
-            use_container_width=True,
-        )
-    with col3:
-        if pdf_path.exists():
-            st.download_button(
-                "Download PDF",
-                data=pdf_path.read_bytes(),
-                file_name=pdf_path.name,
-                mime="application/pdf",
-                use_container_width=True,
-            )
-        else:
-            st.button("PDF unavailable", disabled=True, use_container_width=True)
+    else:
+        st.button("PDF unavailable", disabled=True, use_container_width=True)
 
 
 def _render_priority_actions(report: dict[str, Any]) -> None:
@@ -403,18 +371,27 @@ def _render_reliability(report: dict[str, Any]) -> None:
         st.markdown(f"- {note}")
 
 
+def _clean_interpretation(text: str) -> str:
+    """Strip internal model-name prefixes from semantic interpretation text."""
+    for prefix in ("Qwen sees ", "Qwen: ", "The model sees ", "VLM: "):
+        if text.startswith(prefix):
+            text = text[len(prefix):]
+            text = text[:1].upper() + text[1:]
+    return text
+
+
 def _render_moments(report: dict[str, Any]) -> None:
     moments = report.get("evidence_moments", [])
     if not moments:
         return
-    st.subheader("Moment-by-Moment Evidence")
+    st.subheader("Key Moments from This Session")
     for moment in moments[:6]:
         with st.container(border=True):
-            st.markdown(f"**{moment['timestamp']} - {moment['headline']}**")
-            st.markdown(f"- Observed behavior: {moment['observed_behavior']}")
-            st.markdown(f"- Metric evidence: {moment['metric_evidence']}")
-            st.markdown(f"- Qwen interpretation: {moment['qwen_interpretation']}")
-            st.markdown(f"- Coaching implication: {moment['coaching_implication']}")
+            st.markdown(f"**{moment['timestamp']} — {moment['headline']}**")
+            st.markdown(f"- Observed: {moment['observed_behavior']}")
+            st.markdown(f"- Metrics: {moment['metric_evidence']}")
+            st.markdown(f"- Interpretation: {_clean_interpretation(moment['qwen_interpretation'])}")
+            st.markdown(f"- Take-away: {moment['coaching_implication']}")
 
 
 def _load_qa_report() -> dict[str, Any] | None:
@@ -437,20 +414,6 @@ def _load_qa_report() -> dict[str, Any] | None:
     return report
 
 
-def _render_sidebar_controls() -> dict[str, Any]:
-    st.sidebar.header("Run Settings")
-    enable_semantic = st.sidebar.checkbox("Enable Qwen semantic review", value=False)
-    coach_template_only = st.sidebar.checkbox("Template-only coaching", value=True)
-    coach_top_actions = st.sidebar.slider("Priority actions", min_value=1, max_value=3, value=3)
-    st.sidebar.caption(f"Semantic model env override: `{os.getenv(SEMANTIC_MODEL_ENV, 'default')}`")
-    st.sidebar.caption(f"Coach model env override: `{os.getenv(COACH_MODEL_ENV, 'default')}`")
-    return {
-        "enable_semantic": enable_semantic,
-        "coach_template_only": coach_template_only,
-        "coach_top_actions": coach_top_actions,
-    }
-
-
 def main() -> None:
     st.set_page_config(page_title=APP_TITLE, layout="wide")
     _ensure_dirs()
@@ -461,14 +424,11 @@ def main() -> None:
         "returns a teacher-facing coaching brief with downloads for JSON, Markdown, and PDF."
     )
 
-    controls = _render_sidebar_controls()
     qa_report = _load_qa_report()
     if qa_report is not None:
-        st.sidebar.info("QA fixture mode is enabled from `TEACHER_EVALUATION_QA_REPORT_JSON`.")
-        st.caption(f"QA report fixture: `{qa_report['_qa_report_path']}`")
+        st.sidebar.info("QA fixture mode is active.")
         st.subheader("At a Glance")
         st.write(qa_report.get("executive_summary", "No executive summary was generated."))
-        st.caption(f"Report mode: `{qa_report.get('source', {}).get('mode', 'unknown')}`")
         _render_no_material_intervention(qa_report)
         _render_priority_actions(qa_report)
         _render_strengths(qa_report)
@@ -538,14 +498,14 @@ def main() -> None:
             analysis_fps=12.0,
             window_sec=15.0,
             window_step_sec=15.0,
-            enable_semantic=controls["enable_semantic"],
-            disable_qwen=not controls["enable_semantic"],
-            qwen_model=os.getenv(SEMANTIC_MODEL_ENV, "Qwen/Qwen2.5-VL-7B-Instruct"),
+            enable_semantic=True,
+            disable_qwen=False,
+            qwen_model=_semantic_model_name(),
             disable_sam2=True,
             enable_coaching=True,
-            coach_model=os.getenv(COACH_MODEL_ENV, "Qwen/Qwen2.5-3B-Instruct"),
-            coach_top_actions=controls["coach_top_actions"],
-            coach_fallback_template_only=controls["coach_template_only"],
+            coach_model=os.getenv(COACH_MODEL_ENV, "gemini-2.5-flash"),
+            coach_top_actions=3,
+            coach_fallback_template_only=False,
             progress_callback=progress_callback,
         )
     except Exception as exc:
@@ -586,14 +546,6 @@ def main() -> None:
 
     st.subheader("Downloads")
     _report_downloads(report_artifacts)
-
-    with st.expander("Technical references"):
-        st.markdown(f"- Run directory: `{results['run_dir']}`")
-        st.markdown(f"- Technical summary: `{results['artifacts']['summary_md']}`")
-        st.markdown(f"- Window summary: `{results['window_md']}`")
-        if results["artifacts"].get("semantic"):
-            st.markdown(f"- Semantic summary: `{results['artifacts']['semantic']['summary_md']}`")
-        st.markdown(f"- Coaching evidence: `{report_artifacts['evidence_json']}`")
 
 
 if __name__ == "__main__":

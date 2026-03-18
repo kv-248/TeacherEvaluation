@@ -354,7 +354,7 @@ def _run_qwen(
 ) -> dict[str, Any]:
     result: dict[str, Any] = {
         "status": "skipped",
-        "reason": "Qwen semantic analysis disabled.",
+        "reason": "Semantic model analysis disabled.",
         "model": config.qwen_model,
         "device": config.qwen_device,
         "device_map": config.qwen_device_map,
@@ -437,7 +437,7 @@ def _run_qwen(
         import transformers as tf
     except Exception as exc:
         result["status"] = "unavailable"
-        result["reason"] = f"Missing Qwen dependencies: {type(exc).__name__}: {exc}"
+        result["reason"] = f"Missing local semantic-model dependencies: {type(exc).__name__}: {exc}"
         return result
 
     try:
@@ -456,7 +456,7 @@ def _run_qwen(
             raise RuntimeError("No compatible transformers vision-language auto-model class was found.")
     except Exception as exc:
         result["status"] = "unavailable"
-        result["reason"] = f"Could not resolve transformers Qwen classes: {type(exc).__name__}: {exc}"
+        result["reason"] = f"Could not resolve local transformer semantic-model classes: {type(exc).__name__}: {exc}"
         return result
 
     dtype_map = {
@@ -498,7 +498,7 @@ def _run_qwen(
         model.eval()
     except Exception as exc:
         result["status"] = "failed"
-        result["reason"] = f"Could not load Qwen model: {type(exc).__name__}: {exc}"
+        result["reason"] = f"Could not load local semantic model: {type(exc).__name__}: {exc}"
         return result
 
     device_for_inputs = generation_device_for(model, device)
@@ -542,7 +542,7 @@ def _run_qwen(
             annotations.append(_build_qwen_annotation(sample, parsed, decoded))
     except Exception as exc:
         result["status"] = "failed"
-        result["reason"] = f"Qwen inference failed: {type(exc).__name__}: {exc}"
+        result["reason"] = f"Semantic inference failed: {type(exc).__name__}: {exc}"
         return result
     finally:
         try:
@@ -581,7 +581,7 @@ def _run_qwen(
     result.update(
         {
             "status": "completed",
-            "reason": "Qwen semantic analysis completed.",
+            "reason": "Semantic model analysis completed.",
             "annotations": annotations,
             "aggregate": aggregate,
         }
@@ -851,7 +851,7 @@ def _build_contact_sheet(
         if qwen_row:
             cv2.putText(
                 overlay,
-                f"Qwen focus={qwen_row['teacher_focus']}  action={qwen_row['body_action']}",
+                f"Semantic focus={qwen_row['teacher_focus']}  action={qwen_row['body_action']}",
                 (22, tile_h - 46),
                 cv2.FONT_HERSHEY_SIMPLEX,
                 0.62,
@@ -881,7 +881,7 @@ def _base_to_semantic_agreement(summary: dict[str, Any], qwen_result: dict[str, 
     if qwen_result.get("status") != "completed":
         return {
             "status": "not_available",
-            "reason": "Qwen semantic output was not available.",
+            "reason": "Semantic output was not available.",
         }
 
     aggregate = qwen_result.get("aggregate", {})
@@ -966,7 +966,7 @@ def _summary_markdown(payload: dict[str, Any], summary: dict[str, Any], qwen_res
         f"- Base eye-contact distribution score: `{summary['scores']['eye_contact_distribution_score']:.1f}`",
         f"- Sample count used for semantic review: `{payload['sample_count']}`",
         "",
-        "## Qwen",
+        "## Semantic Model",
         "",
         f"- Status: `{qwen_result['status']}`",
         f"- Reason: {qwen_result['reason']}",
@@ -1017,7 +1017,7 @@ def _summary_markdown(payload: dict[str, Any], summary: dict[str, Any], qwen_res
             [
                 f"- Label: `{agreement['label']}`",
                 f"- Base audience ratio: `{agreement['base_audience_orientation_ratio']:.2f}`",
-                f"- Qwen audience ratio: `{agreement['qwen_audience_focus_ratio']:.2f}`",
+                f"- Semantic audience ratio: `{agreement['qwen_audience_focus_ratio']:.2f}`",
                 f"- Absolute difference: `{agreement['difference']:.2f}`",
                 f"- Note: {agreement['note']}",
             ]

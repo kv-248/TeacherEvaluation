@@ -69,22 +69,7 @@ python run_segment_batch.py --video samples/Lecture_1_cut_1m_to_5m.mp4
 python run_long_experiment.py --video samples/Lecture_1_cut_1m_to_5m.mp4 --start-sec 92.5 --duration-sec 60 --analysis-fps 12
 ```
 
-Optional semantic layer with Qwen and SAM2 as additive outputs only:
-
-```bash
-pip install -r requirements_optional_semantic.txt
-python run_long_experiment.py \
-  --video samples/Lecture_1_cut_1m_to_5m.mp4 \
-  --start-sec 92.5 \
-  --duration-sec 60 \
-  --analysis-fps 12 \
-  --enable-semantic \
-  --qwen-model Qwen/Qwen2.5-VL-7B-Instruct \
-  --qwen-device cuda:0 \
-  --disable-sam2
-```
-
-Gemini API can also be used as an optional backend for both semantic review and final coaching, which avoids local model downloads. Set a fresh API key in `GEMINI_API_KEY` (or `GOOGLE_API_KEY`) and pass Gemini model names:
+Default Gemini-backed semantic review and coaching:
 
 ```bash
 export GEMINI_API_KEY=your_rotated_key_here
@@ -94,28 +79,22 @@ python run_long_experiment.py \
   --duration-sec 60 \
   --analysis-fps 12 \
   --enable-semantic \
-  --enable-coaching \
-  --qwen-model gemini-2.5-flash \
+  --semantic-model gemini-2.5-flash \
   --coach-model gemini-2.5-flash \
   --disable-sam2
 ```
 
-Gemini coaching output is validated against the `feedback_first_v1` report shape and falls back to the deterministic template brief if the response cannot be parsed cleanly.
+This is the recommended path for this repo. It avoids local heavy-model downloads and uses the Gemini API for both frame-level semantic review and final coaching synthesis.
 
-For a larger Qwen checkpoint that can shard across both A40s, pass a model id such as `Qwen/Qwen2.5-VL-32B-Instruct` with `--qwen-device-map auto`.
-
-Teacher-facing coaching brief with targeted Qwen review and a local synthesis model:
+Legacy local-transformer support still exists in code, but it is no longer the default and it is not required for normal use. If you ever need that older path for experiments, install:
 
 ```bash
-python run_long_experiment.py \
-  --video samples/Lecture_1_cut_1m_to_5m.mp4 \
-  --start-sec 92.5 \
-  --duration-sec 60 \
-  --analysis-fps 12 \
-  --enable-coaching
+pip install -r requirements_optional_semantic.txt
 ```
 
-Fast smoke test without downloading local Qwen weights:
+Gemini coaching output is validated against the `feedback_first_v1` report shape and falls back to the deterministic template brief if the response cannot be parsed cleanly.
+
+Fast smoke test with no semantic model call:
 
 ```bash
 python run_long_experiment.py \
@@ -140,7 +119,7 @@ To use Gemini in the Streamlit frontend without editing code:
 
 ```bash
 export GEMINI_API_KEY=your_rotated_key_here
-export TEACHER_EVALUATION_QWEN_MODEL=gemini-2.5-flash
+export TEACHER_EVALUATION_SEMANTIC_MODEL=gemini-2.5-flash
 export TEACHER_EVALUATION_COACH_MODEL=gemini-2.5-flash
 streamlit run streamlit_app.py
 ```
@@ -172,8 +151,8 @@ python docs/render_report_pdf.py --input docs/nonverbal_eval_research_report.md 
 - The current MediaPipe/TFLite path is effectively CPU-bound in this environment. The two available A40 GPUs are not the main acceleration path for the current inference stack.
 - The semantic layer is strictly additive. It writes separate semantic artifacts and does not change the existing heuristic score formulas.
 - The coaching layer is also strictly additive. It builds a separate teacher-facing brief from structured evidence and does not overwrite `summary_full.*` or `window_summary.*`.
-- The default semantic model is now `Qwen/Qwen2.5-VL-7B-Instruct`, which is a stronger drop-in upgrade over the earlier `3B` path for this repo's frame-level semantic review tasks.
-- The default coaching synthesis model is `Qwen/Qwen2.5-3B-Instruct`. If that model is unavailable, the runner falls back to a deterministic template-driven coaching brief.
-- Qwen can run with the optional `transformers` and `accelerate` dependencies. SAM2 has a stricter torch requirement and is therefore gated behind explicit config/checkpoint arguments and version checks.
+- The default semantic model is `gemini-2.5-flash`.
+- The default coaching synthesis model is also `gemini-2.5-flash`. If that call is unavailable or the response is malformed, the runner falls back to a deterministic template-driven coaching brief.
+- No local heavy LLM or VLM download is required for the default path. The optional `transformers` and `accelerate` stack is only for legacy local experiments. SAM2 has a stricter torch requirement and is therefore gated behind explicit config/checkpoint arguments and version checks.
 - The current runtime expects the legacy MediaPipe `solutions` API, so `requirements.txt` pins `mediapipe==0.10.21` and a compatible OpenCV/Numpy range.
 - `.codex/`, workspace session logs, and unrelated local state are intentionally excluded.

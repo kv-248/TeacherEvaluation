@@ -2,7 +2,7 @@ version = "0.3.0"
 purpose = "Teacher-facing coaching synthesis prompt plus feedback-first fallback action and strength templates."
 
 [coaching_synthesis]
-model = "Qwen/Qwen2.5-3B-Instruct"
+model = "gemini-2.5-flash"
 fallback = "template"
 
 prompt = """
