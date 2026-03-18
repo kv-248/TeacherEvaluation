@@ -349,7 +349,6 @@ def main() -> None:
                 semantic_max_samples=8,
                 disable_qwen=False,
                 qwen_model=args.qwen_model,
-                disable_sam2=True,
                 enable_coaching=True,
                 coach_model=args.coach_model,
                 coach_fallback_template_only=False,

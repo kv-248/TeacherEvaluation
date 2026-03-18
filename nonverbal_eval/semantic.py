@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import ast
 import json
 import math
 import re
@@ -9,12 +8,10 @@ from pathlib import Path
 from typing import Any
 
 import cv2
-import mediapipe as mp
 import numpy as np
 import pandas as pd
-from PIL import Image
 
-from .gemini_api import generate_gemini_json, is_gemini_model
+from .gemini_api import generate_gemini_json
 from .pipeline import log_event
 from .runtime_config import load_qwen_prompt_config
 
@@ -29,15 +26,8 @@ class SemanticConfig:
     max_samples: int = 8
     qwen_enabled: bool = True
     qwen_model: str = str(_QWEN_CONFIG["model"])
-    qwen_device: str = "cuda:0"
-    qwen_device_map: str | None = None
-    qwen_dtype: str = "bfloat16"
     qwen_max_new_tokens: int = int(_QWEN_CONFIG["max_new_tokens"])
     qwen_temperature: float = float(_QWEN_CONFIG["temperature"])
-    sam2_enabled: bool = True
-    sam2_model_cfg: str | None = None
-    sam2_checkpoint: Path | None = None
-    sam2_device: str = "cuda:1"
 
 
 @dataclass(slots=True)
@@ -46,7 +36,6 @@ class SemanticArtifacts:
     sampled_frames_dir: Path
     contact_sheet_path: Path
     qwen_annotations_path: Path
-    sam2_metrics_path: Path
     summary_json_path: Path
     summary_md_path: Path
 
@@ -114,15 +103,6 @@ def _extract_json_blob(text: str) -> dict[str, Any]:
         try:
             value = json.loads(candidate)
         except json.JSONDecodeError as exc:
-            last_error = exc
-        else:
-            if isinstance(value, dict):
-                return value
-            raise ValueError("Model output JSON must be an object.")
-
-        try:
-            value = ast.literal_eval(candidate)
-        except (SyntaxError, ValueError) as exc:
             last_error = exc
             continue
         if isinstance(value, dict):
@@ -206,7 +186,6 @@ def build_semantic_artifacts(run_dir: Path) -> SemanticArtifacts:
         sampled_frames_dir=sampled_frames_dir,
         contact_sheet_path=root_dir / "semantic_contact_sheet.jpg",
         qwen_annotations_path=root_dir / "qwen_annotations.json",
-        sam2_metrics_path=root_dir / "sam2_mask_metrics.json",
         summary_json_path=root_dir / "semantic_summary.json",
         summary_md_path=root_dir / "semantic_summary.md",
     )
@@ -220,20 +199,6 @@ def _safe_ratio(numerator: float, denominator: float) -> float:
     if denominator <= 0:
         return 0.0
     return float(numerator / denominator)
-
-
-def _parse_version_tuple(version: str) -> tuple[int, ...]:
-    parts = re.findall(r"\d+", version)
-    return tuple(int(part) for part in parts[:3])
-
-
-def _version_at_least(version: str, minimum: str) -> bool:
-    current = _parse_version_tuple(version)
-    baseline = _parse_version_tuple(minimum)
-    width = max(len(current), len(baseline))
-    current += (0,) * (width - len(current))
-    baseline += (0,) * (width - len(baseline))
-    return current >= baseline
 
 
 def _sanitize_short_text(value: Any, max_words: int) -> str:
@@ -356,201 +321,33 @@ def _run_qwen(
         "status": "skipped",
         "reason": "Semantic model analysis disabled.",
         "model": config.qwen_model,
-        "device": config.qwen_device,
-        "device_map": config.qwen_device_map,
         "annotations": [],
         "aggregate": {},
     }
     if not config.qwen_enabled:
         return result
 
-    if is_gemini_model(config.qwen_model):
-        annotations: list[dict[str, Any]] = []
-        try:
-            for sample in samples:
-                parsed, raw_text = generate_gemini_json(
-                    model_name=config.qwen_model,
-                    system_instruction=(
-                        "You are reviewing a single frame from a classroom lecture video. "
-                        "Return only the JSON object that matches the schema. "
-                        "Use only the allowed enum values for categorical fields."
-                    ),
-                    user_text=QWEN_PROMPT,
-                    image_paths=[sample.image_path],
-                    max_output_tokens=max(int(config.qwen_max_new_tokens), 192),
-                    temperature=0.0,
-                    response_json_schema=_gemini_annotation_schema(),
-                )
-                annotations.append(_build_qwen_annotation(sample, parsed, raw_text))
-        except Exception as exc:
-            result["status"] = "failed"
-            result["reason"] = f"Gemini semantic inference failed: {type(exc).__name__}: {exc}"
-            return result
-
-        focus_counts = pd.Series([row["teacher_focus"] for row in annotations]).value_counts().to_dict()
-        action_counts = pd.Series([row["body_action"] for row in annotations]).value_counts().to_dict()
-        affect_counts = pd.Series([row["affect_tone"] for row in annotations]).value_counts().to_dict()
-        posture_counts = pd.Series([row["posture_signal"] for row in annotations]).value_counts().to_dict()
-        annotation_count = max(len(annotations), 1)
-        aggregate = {
-            "sample_count": len(annotations),
-            "audience_focus_ratio": _safe_ratio(focus_counts.get("audience", 0), annotation_count),
-            "board_focus_ratio": _safe_ratio(focus_counts.get("board", 0), annotation_count),
-            "screen_focus_ratio": _safe_ratio(focus_counts.get("screen", 0), annotation_count),
-            "notes_focus_ratio": _safe_ratio(focus_counts.get("notes", 0), annotation_count),
-            "open_palm_explaining_ratio": _safe_ratio(action_counts.get("open_palm_explaining", 0), annotation_count),
-            "static_stance_ratio": _safe_ratio(action_counts.get("static_stance", 0), annotation_count),
-            "pointing_ratio": _safe_ratio(
-                action_counts.get("pointing_board", 0) + action_counts.get("pointing_screen", 0), annotation_count
-            ),
-            "writing_ratio": _safe_ratio(action_counts.get("writing_board", 0), annotation_count),
-            "warm_affect_ratio": _safe_ratio(affect_counts.get("warm", 0), annotation_count),
-            "tense_affect_ratio": _safe_ratio(affect_counts.get("tense", 0), annotation_count),
-            "closed_or_slouched_ratio": _safe_ratio(posture_counts.get("closed_or_slouched", 0), annotation_count),
-            "focus_counts": focus_counts,
-            "action_counts": action_counts,
-            "affect_counts": affect_counts,
-            "posture_counts": posture_counts,
-        }
-        result.update(
-            {
-                "status": "completed",
-                "reason": "Gemini semantic analysis completed.",
-                "device": "gemini_api",
-                "annotations": annotations,
-                "aggregate": aggregate,
-            }
-        )
-        if event_name:
-            log_event(
-                events_path,
-                event_name,
-                sample_count=len(annotations),
-                focus_counts=focus_counts,
-                action_counts=action_counts,
-                affect_counts=affect_counts,
-            )
-        return result
-
-    try:
-        import torch
-        import transformers as tf
-    except Exception as exc:
-        result["status"] = "unavailable"
-        result["reason"] = f"Missing local semantic-model dependencies: {type(exc).__name__}: {exc}"
-        return result
-
-    try:
-        processor_cls = getattr(tf, "AutoProcessor")
-        model_cls = None
-        for candidate_name in (
-            "Qwen2_5_VLForConditionalGeneration",
-            "AutoModelForImageTextToText",
-            "AutoModelForVision2Seq",
-            "AutoModelForCausalLM",
-        ):
-            if hasattr(tf, candidate_name):
-                model_cls = getattr(tf, candidate_name)
-                break
-        if model_cls is None:
-            raise RuntimeError("No compatible transformers vision-language auto-model class was found.")
-    except Exception as exc:
-        result["status"] = "unavailable"
-        result["reason"] = f"Could not resolve local transformer semantic-model classes: {type(exc).__name__}: {exc}"
-        return result
-
-    dtype_map = {
-        "float16": torch.float16,
-        "bfloat16": torch.bfloat16,
-        "float32": torch.float32,
-    }
-    device = config.qwen_device
-    torch_dtype = dtype_map.get(config.qwen_dtype.lower(), torch.bfloat16)
-    device_map = config.qwen_device_map
-    if device.lower() == "auto" and not device_map:
-        device_map = "auto"
-
-    def generation_device_for(model: Any, fallback_device: str) -> str:
-        hf_device_map = getattr(model, "hf_device_map", None)
-        if isinstance(hf_device_map, dict):
-            for mapped_device in hf_device_map.values():
-                if isinstance(mapped_device, str) and mapped_device not in {"cpu", "disk"}:
-                    return mapped_device
-        try:
-            return str(next(model.parameters()).device)
-        except Exception:
-            return fallback_device
-
-    try:
-        processor = processor_cls.from_pretrained(config.qwen_model, trust_remote_code=True)
-        load_kwargs: dict[str, Any] = {
-            "dtype": torch_dtype,
-            "low_cpu_mem_usage": True,
-            "trust_remote_code": True,
-        }
-        if device_map:
-            load_kwargs["device_map"] = device_map
-        model = model_cls.from_pretrained(config.qwen_model, **load_kwargs)
-        if device_map is None:
-            if device.startswith("cuda") and not torch.cuda.is_available():
-                device = "cpu"
-            model = model.to(device)
-        model.eval()
-    except Exception as exc:
-        result["status"] = "failed"
-        result["reason"] = f"Could not load local semantic model: {type(exc).__name__}: {exc}"
-        return result
-
-    device_for_inputs = generation_device_for(model, device)
-
     annotations: list[dict[str, Any]] = []
     try:
         for sample in samples:
-            image = Image.open(sample.image_path).convert("RGB")
-            messages = [
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "image"},
-                        {"type": "text", "text": QWEN_PROMPT},
-                    ],
-                }
-            ]
-            if hasattr(processor, "apply_chat_template"):
-                prompt_text = processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-                inputs = processor(text=[prompt_text], images=[image], return_tensors="pt")
-            else:
-                inputs = processor(images=image, text=QWEN_PROMPT, return_tensors="pt")
-            model_inputs: dict[str, Any] = {}
-            for key, value in inputs.items():
-                if hasattr(value, "to"):
-                    model_inputs[key] = value.to(device_for_inputs)
-                else:
-                    model_inputs[key] = value
-            with torch.inference_mode():
-                generated_ids = model.generate(
-                    **model_inputs,
-                    do_sample=False if config.qwen_temperature <= 0.0 else True,
-                    temperature=max(config.qwen_temperature, 1e-5),
-                    max_new_tokens=config.qwen_max_new_tokens,
-                )
-            prompt_tokens = model_inputs.get("input_ids")
-            if prompt_tokens is not None:
-                generated_ids = generated_ids[:, prompt_tokens.shape[1] :]
-            decoded = processor.batch_decode(generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True)[0]
-            parsed = _extract_json_blob(decoded)
-            annotations.append(_build_qwen_annotation(sample, parsed, decoded))
+            parsed, raw_text = generate_gemini_json(
+                model_name=config.qwen_model,
+                system_instruction=(
+                    "You are reviewing a single frame from a classroom lecture video. "
+                    "Return only the JSON object that matches the schema. "
+                    "Use only the allowed enum values for categorical fields."
+                ),
+                user_text=QWEN_PROMPT,
+                image_paths=[sample.image_path],
+                max_output_tokens=max(int(config.qwen_max_new_tokens), 192),
+                temperature=0.0,
+                response_json_schema=_gemini_annotation_schema(),
+            )
+            annotations.append(_build_qwen_annotation(sample, parsed, raw_text))
     except Exception as exc:
         result["status"] = "failed"
-        result["reason"] = f"Semantic inference failed: {type(exc).__name__}: {exc}"
+        result["reason"] = f"Gemini semantic inference failed: {type(exc).__name__}: {exc}"
         return result
-    finally:
-        try:
-            del model
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
-        except Exception:
-            pass
 
     focus_counts = pd.Series([row["teacher_focus"] for row in annotations]).value_counts().to_dict()
     action_counts = pd.Series([row["body_action"] for row in annotations]).value_counts().to_dict()
@@ -577,11 +374,11 @@ def _run_qwen(
         "affect_counts": affect_counts,
         "posture_counts": posture_counts,
     }
-
     result.update(
         {
             "status": "completed",
-            "reason": "Semantic model analysis completed.",
+            "reason": "Gemini semantic analysis completed.",
+            "device": "gemini_api",
             "annotations": annotations,
             "aggregate": aggregate,
         }
@@ -598,215 +395,15 @@ def _run_qwen(
     return result
 
 
-def _pose_prompt_box(image_bgr: np.ndarray) -> np.ndarray | None:
-    image_rgb = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB)
-    pose = mp.solutions.pose.Pose(
-        static_image_mode=True,
-        model_complexity=1,
-        min_detection_confidence=0.5,
-    )
-    try:
-        results = pose.process(image_rgb)
-    finally:
-        pose.close()
-    if not results.pose_landmarks:
-        return None
-
-    height, width = image_bgr.shape[:2]
-    coords: list[tuple[float, float]] = []
-    for landmark in results.pose_landmarks.landmark:
-        visibility = getattr(landmark, "visibility", 1.0)
-        if visibility < 0.35:
-            continue
-        x = float(np.clip(landmark.x, 0.0, 1.0) * width)
-        y = float(np.clip(landmark.y, 0.0, 1.0) * height)
-        coords.append((x, y))
-    if len(coords) < 6:
-        return None
-    xs, ys = zip(*coords)
-    x1 = max(min(xs) - width * 0.08, 0.0)
-    y1 = max(min(ys) - height * 0.08, 0.0)
-    x2 = min(max(xs) + width * 0.08, width - 1.0)
-    y2 = min(max(ys) + height * 0.08, height - 1.0)
-    if x2 - x1 < width * 0.12 or y2 - y1 < height * 0.18:
-        return None
-    return np.array([x1, y1, x2, y2], dtype=np.float32)
-
-
-def _compute_mask_iou(mask_a: np.ndarray | None, mask_b: np.ndarray | None) -> float:
-    if mask_a is None or mask_b is None:
-        return float("nan")
-    intersection = np.logical_and(mask_a, mask_b).sum()
-    union = np.logical_or(mask_a, mask_b).sum()
-    if union <= 0:
-        return float("nan")
-    return float(intersection / union)
-
-
-def _run_sam2(samples: list[SemanticSample], config: SemanticConfig, events_path: Path) -> dict[str, Any]:
-    result: dict[str, Any] = {
-        "status": "skipped",
-        "reason": "SAM2 semantic analysis disabled.",
-        "annotations": [],
-        "aggregate": {},
-    }
-    if not config.sam2_enabled:
-        return result
-
-    try:
-        import torch
-    except Exception as exc:
-        result["status"] = "unavailable"
-        result["reason"] = f"PyTorch is unavailable for SAM2: {type(exc).__name__}: {exc}"
-        return result
-
-    if not _version_at_least(torch.__version__, "2.5.1"):
-        result["status"] = "unavailable"
-        result["reason"] = f"SAM2 requires torch>=2.5.1; current torch is {torch.__version__}."
-        return result
-    if not config.sam2_model_cfg or not config.sam2_checkpoint:
-        result["status"] = "unavailable"
-        result["reason"] = "SAM2 needs both --sam2-model-cfg and --sam2-checkpoint."
-        return result
-
-    try:
-        from sam2.build_sam import build_sam2
-        from sam2.sam2_image_predictor import SAM2ImagePredictor
-    except Exception as exc:
-        result["status"] = "unavailable"
-        result["reason"] = f"Missing SAM2 package: {type(exc).__name__}: {exc}"
-        return result
-
-    try:
-        predictor = SAM2ImagePredictor(build_sam2(config.sam2_model_cfg, str(config.sam2_checkpoint), device=config.sam2_device))
-    except Exception as exc:
-        result["status"] = "failed"
-        result["reason"] = f"Could not initialize SAM2: {type(exc).__name__}: {exc}"
-        return result
-
-    records: list[dict[str, Any]] = []
-    previous_mask: np.ndarray | None = None
-    try:
-        for sample in samples:
-            prompt_box = _pose_prompt_box(sample.frame_bgr)
-            if prompt_box is None:
-                records.append(
-                    {
-                        "timestamp_sec": sample.timestamp_sec,
-                        "reason": sample.reason,
-                        "status": "no_pose_box",
-                    }
-                )
-                continue
-            image_rgb = cv2.cvtColor(sample.frame_bgr, cv2.COLOR_BGR2RGB)
-            predictor.set_image(image_rgb)
-            masks, scores, _ = predictor.predict(box=prompt_box[None, :], multimask_output=False)
-            if masks is None or len(masks) == 0:
-                records.append(
-                    {
-                        "timestamp_sec": sample.timestamp_sec,
-                        "reason": sample.reason,
-                        "status": "no_mask",
-                    }
-                )
-                previous_mask = None
-                continue
-            mask = masks[0].astype(bool)
-            height, width = mask.shape
-            ys, xs = np.where(mask)
-            if xs.size == 0 or ys.size == 0:
-                records.append(
-                    {
-                        "timestamp_sec": sample.timestamp_sec,
-                        "reason": sample.reason,
-                        "status": "empty_mask",
-                    }
-                )
-                previous_mask = None
-                continue
-            area_ratio = float(mask.mean())
-            centroid_x = float(xs.mean() / width)
-            centroid_y = float(ys.mean() / height)
-            edge_margin_x = max(int(width * 0.02), 2)
-            edge_margin_y = max(int(height * 0.02), 2)
-            touches_left = bool(mask[:, :edge_margin_x].any())
-            touches_right = bool(mask[:, width - edge_margin_x :].any())
-            touches_top = bool(mask[:edge_margin_y, :].any())
-            touches_bottom = bool(mask[height - edge_margin_y :, :].any())
-            stability_iou = _compute_mask_iou(previous_mask, mask)
-            records.append(
-                {
-                    "timestamp_sec": sample.timestamp_sec,
-                    "reason": sample.reason,
-                    "status": "ok",
-                    "sam2_score": float(scores[0]) if scores is not None and len(scores) else float("nan"),
-                    "mask_area_ratio": area_ratio,
-                    "centroid_x_norm": centroid_x,
-                    "centroid_y_norm": centroid_y,
-                    "stage_zone": "left" if centroid_x < 0.33 else "center" if centroid_x < 0.67 else "right",
-                    "touches_left_edge": touches_left,
-                    "touches_right_edge": touches_right,
-                    "touches_top_edge": touches_top,
-                    "touches_bottom_edge": touches_bottom,
-                    "frame_cutoff_flag": bool(touches_left or touches_right or touches_top or touches_bottom),
-                    "stability_iou_prev": stability_iou,
-                }
-            )
-            previous_mask = mask
-    except Exception as exc:
-        result["status"] = "failed"
-        result["reason"] = f"SAM2 inference failed: {type(exc).__name__}: {exc}"
-        return result
-
-    ok_records = [row for row in records if row.get("status") == "ok"]
-    if not ok_records:
-        result["status"] = "failed"
-        result["reason"] = "SAM2 ran but produced no usable masks on sampled frames."
-        result["annotations"] = records
-        return result
-
-    frame_count = len(ok_records)
-    zone_counts = pd.Series([row["stage_zone"] for row in ok_records]).value_counts().to_dict()
-    aggregate = {
-        "sample_count": frame_count,
-        "tracked_sample_ratio": _safe_ratio(frame_count, len(samples)),
-        "stage_zone_counts": zone_counts,
-        "stage_zone_balance_score": 100.0 * _clip01(len(zone_counts) / 3.0),
-        "mean_mask_area_ratio": float(np.mean([row["mask_area_ratio"] for row in ok_records])),
-        "mean_cutoff_risk": 100.0
-        * float(np.mean([1.0 if row["frame_cutoff_flag"] else 0.0 for row in ok_records])),
-        "mean_mask_stability_iou": float(np.nanmean([row["stability_iou_prev"] for row in ok_records])),
-    }
-
-    result.update(
-        {
-            "status": "completed",
-            "reason": "SAM2 mask analysis completed.",
-            "annotations": records,
-            "aggregate": aggregate,
-        }
-    )
-    log_event(
-        events_path,
-        "semantic_sam2_completed",
-        sample_count=frame_count,
-        stage_zone_counts=zone_counts,
-        tracked_sample_ratio=aggregate["tracked_sample_ratio"],
-    )
-    return result
-
-
 def _build_contact_sheet(
     samples: list[SemanticSample],
     qwen_result: dict[str, Any],
-    sam2_result: dict[str, Any],
     output_path: Path,
 ) -> None:
     if not samples:
         return
 
     qwen_lookup = {round(row["timestamp_sec"], 2): row for row in qwen_result.get("annotations", [])}
-    sam2_lookup = {round(row["timestamp_sec"], 2): row for row in sam2_result.get("annotations", [])}
     tile_w = 640
     tile_h = 360
     cols = 2
@@ -820,22 +417,6 @@ def _build_contact_sheet(
         overlay = tile.copy()
 
         qwen_row = qwen_lookup.get(round(sample.timestamp_sec, 2))
-        sam2_row = sam2_lookup.get(round(sample.timestamp_sec, 2))
-        if sam2_row and sam2_row.get("status") == "ok":
-            zone = sam2_row["stage_zone"]
-            zone_text = f"SAM2 zone={zone} area={sam2_row['mask_area_ratio']:.3f}"
-            cv2.rectangle(overlay, (10, 10), (400, 86), (0, 0, 0), thickness=-1)
-            cv2.putText(overlay, zone_text, (22, 42), cv2.FONT_HERSHEY_SIMPLEX, 0.72, (255, 255, 255), 2, cv2.LINE_AA)
-            cv2.putText(
-                overlay,
-                f"cutoff={int(bool(sam2_row['frame_cutoff_flag']))} stability={sam2_row['stability_iou_prev']:.2f}",
-                (22, 72),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.62,
-                (255, 255, 255),
-                2,
-                cv2.LINE_AA,
-            )
 
         cv2.rectangle(overlay, (10, tile_h - 110), (tile_w - 10, tile_h - 10), (0, 0, 0), thickness=-1)
         cv2.putText(
@@ -911,7 +492,6 @@ def _build_summary(
     samples: list[SemanticSample],
     summary: dict[str, Any],
     qwen_result: dict[str, Any],
-    sam2_result: dict[str, Any],
 ) -> dict[str, Any]:
     semantic_summary: dict[str, Any] = {
         "sample_count": len(samples),
@@ -921,11 +501,6 @@ def _build_summary(
             "status": qwen_result.get("status"),
             "reason": qwen_result.get("reason"),
             "aggregate": qwen_result.get("aggregate", {}),
-        },
-        "sam2": {
-            "status": sam2_result.get("status"),
-            "reason": sam2_result.get("reason"),
-            "aggregate": sam2_result.get("aggregate", {}),
         },
         "agreement": _base_to_semantic_agreement(summary, qwen_result),
     }
@@ -942,18 +517,10 @@ def _build_summary(
         }
     else:
         semantic_summary["semantic_extensions"] = {}
-    if sam2_result.get("status") == "completed":
-        semantic_summary["semantic_extensions"].update(
-            {
-                "stage_zone_balance_score_sam2": sam2_result["aggregate"].get("stage_zone_balance_score", 0.0),
-                "tracked_sample_ratio_sam2": sam2_result["aggregate"].get("tracked_sample_ratio", 0.0),
-                "mean_cutoff_risk_sam2": sam2_result["aggregate"].get("mean_cutoff_risk", 0.0),
-            }
-        )
     return semantic_summary
 
 
-def _summary_markdown(payload: dict[str, Any], summary: dict[str, Any], qwen_result: dict[str, Any], sam2_result: dict[str, Any]) -> str:
+def _summary_markdown(payload: dict[str, Any], summary: dict[str, Any], qwen_result: dict[str, Any]) -> str:
     lines = [
         "# Semantic Extensions Summary",
         "",
@@ -982,25 +549,6 @@ def _summary_markdown(payload: dict[str, Any], summary: dict[str, Any], qwen_res
                 f"- Tense affect ratio: `{aggregate['tense_affect_ratio']:.2f}`",
                 f"- Static stance ratio: `{aggregate['static_stance_ratio']:.2f}`",
                 f"- Pointing ratio: `{aggregate['pointing_ratio']:.2f}`",
-            ]
-        )
-    lines.extend(
-        [
-            "",
-            "## SAM2",
-            "",
-            f"- Status: `{sam2_result['status']}`",
-            f"- Reason: {sam2_result['reason']}",
-        ]
-    )
-    if sam2_result.get("status") == "completed":
-        aggregate = sam2_result["aggregate"]
-        lines.extend(
-            [
-                f"- Tracked sample ratio: `{aggregate['tracked_sample_ratio']:.2f}`",
-                f"- Stage-zone balance score: `{aggregate['stage_zone_balance_score']:.1f}`",
-                f"- Mean cutoff risk: `{aggregate['mean_cutoff_risk']:.1f}`",
-                f"- Mean mask stability IoU: `{aggregate['mean_mask_stability_iou']:.2f}`",
             ]
         )
     agreement = payload["agreement"]
@@ -1045,15 +593,10 @@ def run_semantic_extensions(
         clip_duration_sec=float(summary["clip"]["duration_sec_actual"]),
     )
     qwen_result = _run_qwen(samples, config, events_path)
-    sam2_result = _run_sam2(samples, config, events_path)
-    payload = _build_summary(samples, summary, qwen_result, sam2_result)
+    payload = _build_summary(samples, summary, qwen_result)
 
     artifacts.qwen_annotations_path.write_text(
         json.dumps(qwen_result, indent=2, ensure_ascii=True),
-        encoding="utf-8",
-    )
-    artifacts.sam2_metrics_path.write_text(
-        json.dumps(sam2_result, indent=2, ensure_ascii=True),
         encoding="utf-8",
     )
     artifacts.summary_json_path.write_text(
@@ -1061,15 +604,14 @@ def run_semantic_extensions(
         encoding="utf-8",
     )
     artifacts.summary_md_path.write_text(
-        _summary_markdown(payload, summary, qwen_result, sam2_result),
+        _summary_markdown(payload, summary, qwen_result),
         encoding="utf-8",
     )
-    _build_contact_sheet(samples, qwen_result, sam2_result, artifacts.contact_sheet_path)
+    _build_contact_sheet(samples, qwen_result, artifacts.contact_sheet_path)
     log_event(
         events_path,
         "semantic_extensions_finished",
         qwen_status=qwen_result["status"],
-        sam2_status=sam2_result["status"],
         summary_json=str(artifacts.summary_json_path),
         contact_sheet=str(artifacts.contact_sheet_path),
     )
@@ -1079,11 +621,9 @@ def run_semantic_extensions(
             "sampled_frames_dir": str(artifacts.sampled_frames_dir),
             "contact_sheet": str(artifacts.contact_sheet_path),
             "qwen_annotations": str(artifacts.qwen_annotations_path),
-            "sam2_metrics": str(artifacts.sam2_metrics_path),
             "summary_json": str(artifacts.summary_json_path),
             "summary_md": str(artifacts.summary_md_path),
         },
         "summary": payload,
         "qwen": qwen_result,
-        "sam2": sam2_result,
     }

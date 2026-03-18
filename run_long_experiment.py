@@ -21,18 +21,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--semantic-max-samples", type=int, default=8, help="Maximum number of sampled frames for semantic review.")
     parser.add_argument("--disable-qwen", "--disable-semantic-model", dest="disable_qwen", action="store_true", help="Skip the semantic model annotator.")
     parser.add_argument("--qwen-model", "--semantic-model", dest="qwen_model", type=str, default="gemini-2.5-flash", help="Model name for semantic review. Defaults to Gemini API.")
-    parser.add_argument("--qwen-device", "--semantic-device", dest="qwen_device", type=str, default="cuda:0", help="Legacy device option for local transformer-based semantic backends.")
-    parser.add_argument("--qwen-device-map", type=str, default="", help="Optional device_map for larger local transformer-based semantic backends.")
-    parser.add_argument("--qwen-dtype", type=str, default="bfloat16", help="Torch dtype for local transformer-based semantic backends.")
     parser.add_argument("--qwen-max-new-tokens", type=int, default=180, help="Maximum generated tokens for each semantic frame prompt.")
     parser.add_argument("--qwen-temperature", type=float, default=0.1, help="Sampling temperature for the semantic prompt.")
-    parser.add_argument("--disable-sam2", action="store_true", help="Skip SAM2 mask extraction.")
-    parser.add_argument("--sam2-model-cfg", type=str, default="", help="SAM2 model config name or path.")
-    parser.add_argument("--sam2-checkpoint", type=Path, default=None, help="Path to a local SAM2 checkpoint.")
-    parser.add_argument("--sam2-device", type=str, default="cuda:1", help="Device for SAM2 inference, for example cuda:1 or cpu.")
     parser.add_argument("--enable-coaching", action="store_true", help="Generate a teacher-facing coaching brief as an additive artifact.")
     parser.add_argument("--coach-model", type=str, default="gemini-2.5-flash", help="Model name used to synthesize the coaching brief. Defaults to Gemini API.")
-    parser.add_argument("--coach-device", type=str, default="cuda:1", help="Legacy device option for local text-model backends.")
     parser.add_argument("--coach-max-windows", type=int, default=6, help="Maximum number of time windows to review in the coaching report.")
     parser.add_argument("--coach-top-actions", type=int, default=3, help="Number of top-priority actions to include in the coaching brief.")
     parser.add_argument("--coach-render-pdf", action=argparse.BooleanOptionalAction, default=True, help="Render the coaching brief to PDF in addition to markdown and JSON.")
@@ -56,18 +48,10 @@ def main() -> None:
         semantic_max_samples=args.semantic_max_samples,
         disable_qwen=args.disable_qwen,
         qwen_model=args.qwen_model,
-        qwen_device=args.qwen_device,
-        qwen_device_map=args.qwen_device_map or None,
-        qwen_dtype=args.qwen_dtype,
         qwen_max_new_tokens=args.qwen_max_new_tokens,
         qwen_temperature=args.qwen_temperature,
-        disable_sam2=args.disable_sam2,
-        sam2_model_cfg=args.sam2_model_cfg or None,
-        sam2_checkpoint=args.sam2_checkpoint,
-        sam2_device=args.sam2_device,
         enable_coaching=args.enable_coaching,
         coach_model=args.coach_model,
-        coach_device=args.coach_device,
         coach_max_windows=args.coach_max_windows,
         coach_top_actions=args.coach_top_actions,
         coach_render_pdf=args.coach_render_pdf,
@@ -96,7 +80,6 @@ def main() -> None:
         semantic_summary = result["semantic_payload"]["summary"]
         print(f"Semantic samples: {semantic_summary['sample_count']}")
         print(f"Semantic model status: {semantic_summary['qwen']['status']}")
-        print(f"SAM2 semantic status: {semantic_summary['sam2']['status']}")
         print(f"Semantic summary: {result['semantic_payload']['artifacts']['summary_md']}")
     if result["coaching_payload"] is not None:
         print(f"Coaching report: {result['coaching_payload']['artifacts']['report_md']}")

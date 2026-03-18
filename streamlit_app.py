@@ -501,7 +501,6 @@ def main() -> None:
             enable_semantic=True,
             disable_qwen=False,
             qwen_model=_semantic_model_name(),
-            disable_sam2=True,
             enable_coaching=True,
             coach_model=os.getenv(COACH_MODEL_ENV, "gemini-2.5-flash"),
             coach_top_actions=3,

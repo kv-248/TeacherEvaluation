@@ -12,7 +12,7 @@ import cv2
 import numpy as np
 import pandas as pd
 
-from .gemini_api import generate_gemini_json, is_gemini_model
+from .gemini_api import generate_gemini_json
 from .pipeline import log_event
 from .runtime_config import load_base_thresholds, load_coaching_prompt_config, load_qwen_prompt_config
 from .semantic import SemanticConfig, SemanticSample, _extract_frame_at, _run_qwen
@@ -27,16 +27,12 @@ _COACHING_CONFIG = load_coaching_prompt_config()
 class CoachingConfig:
     enabled: bool = False
     coach_model: str = str(_COACHING_CONFIG["coaching_synthesis"]["model"])
-    coach_device: str = "cuda:1"
     coach_max_windows: int = 6
     coach_top_actions: int = 3
     coach_render_pdf: bool = True
     coach_fallback_template_only: bool = False
     qwen_enabled: bool = True
     qwen_model: str = str(_QWEN_CONFIG["model"])
-    qwen_device: str = "cuda:0"
-    qwen_device_map: str | None = None
-    qwen_dtype: str = "bfloat16"
     qwen_max_new_tokens: int = int(_QWEN_CONFIG["max_new_tokens"])
     qwen_temperature: float = float(_QWEN_CONFIG["temperature"])
 
@@ -480,6 +476,34 @@ def _overlay_moment_frame(frame_bgr: np.ndarray, title: str, window_label: str, 
     return image
 
 
+def _best_frame_timestamp(primary_tag: str, window_df: pd.DataFrame, fallback_sec: float) -> float:
+    if window_df.empty:
+        return fallback_sec
+
+    metric_map = {
+        "closed_posture": ("posture_score_frame", True),
+        "upright_confident_presence": ("posture_score_frame", False),
+        "open_palm_explaining": ("open_palm_frame", False),
+        "limited_movement": ("gesture_extent_frame", True),
+        "over_animated_delivery": ("gesture_extent_frame", False),
+        "controlled_expressive_gestures": ("gesture_extent_frame", False),
+        "tense_or_neutral_affect": ("smile_proxy", True),
+        "warm_affect": ("smile_proxy", False),
+        "low_audience_orientation": ("body_front_score_frame", True),
+        "note_reading": ("face_front_score_frame", True),
+    }
+
+    if primary_tag not in metric_map:
+        return fallback_sec
+
+    col, ascending = metric_map[primary_tag]
+    if col not in window_df.columns or window_df[col].dropna().empty:
+        return fallback_sec
+
+    idx = window_df[col].idxmin() if ascending else window_df[col].idxmax()
+    return float(window_df.loc[idx, "timestamp_sec"])
+
+
 def _build_review_windows(
     clip_path: Path,
     frame_metrics_df: pd.DataFrame,
@@ -498,7 +522,14 @@ def _build_review_windows(
         primary_tag = _primary_tag(tags, item["kind"])
         absolute_label = _window_label(float(row["window_start_sec"]), float(row["window_end_sec"]))
         local_midpoint = float(row["window_local_start_sec"]) + (float(row["window_local_end_sec"]) - float(row["window_local_start_sec"])) * 0.5
-        display_frame = _extract_frame_at(clip_path, local_midpoint)
+        
+        local_start = float(row["window_local_start_sec"])
+        local_end = float(row["window_local_end_sec"])
+        segment_df = frame_metrics_df[
+            (frame_metrics_df["timestamp_sec"] >= local_start) & (frame_metrics_df["timestamp_sec"] < local_end)
+        ]
+        best_timestamp = _best_frame_timestamp(primary_tag, segment_df, local_midpoint)
+        display_frame = _extract_frame_at(clip_path, best_timestamp)
         metric_lines = [
             f"overall={row['heuristic_nonverbal_score']:.1f}  eye={row['eye_contact_distribution_score']:.1f}",
             f"presence={row['confidence_presence_score']:.1f}  natural={row['natural_movement_score']:.1f}",
@@ -815,6 +846,47 @@ def _qwen_strength_score(window: dict[str, Any], tag: str) -> float:
     return 0.0
 
 
+def _tag_modality(tag: str) -> str:
+    face_tags = {
+        "tense_or_neutral_affect",
+        "reduced_alertness",
+        "note_reading",
+        "uneven_room_scan",
+        "low_audience_orientation",
+        "warm_affect",
+        "upright_confident_presence",
+    }
+    hand_tags = {
+        "limited_movement",
+        "over_animated_delivery",
+        "open_palm_explaining",
+        "controlled_expressive_gestures",
+    }
+    if tag in face_tags:
+        return "face"
+    if tag in hand_tags:
+        return "hand"
+    return "pose"
+
+
+def _downgrade_confidence_for_modality(tag: str, qc: dict[str, Any], global_conf: str) -> str:
+    mod = _tag_modality(tag)
+    cfg = _BASE_THRESHOLDS["coaching"]["qc_confidence"]
+
+    val = float(qc.get(f"{mod}_coverage", 0.0))
+
+    mod_conf = "low"
+    if val >= float(cfg.get(f"high_{mod}_min", 0.8)):
+        mod_conf = "high"
+    elif val >= float(cfg.get(f"medium_{mod}_min", 0.5)):
+        mod_conf = "medium"
+
+    ranks = {"low": 0, "medium": 1, "high": 2}
+    if ranks[mod_conf] < ranks.get(global_conf, 0):
+        return mod_conf
+    return global_conf
+
+
 def _classify_action_candidate(
     *,
     clip_duration_sec: float,
@@ -886,7 +958,7 @@ def _draft_action_candidates(
                 tag=tag,
                 timestamp=row["window_label"],
                 severity=_action_signal_score(tag, row),
-                confidence=row["quality_control"]["confidence"],
+                confidence=_downgrade_confidence_for_modality(tag, row["quality_control"], row["quality_control"]["confidence"]),
                 evidence_text=_action_evidence_summary(tag, row),
             )
 
@@ -897,7 +969,7 @@ def _draft_action_candidates(
             tag="note_reading",
             timestamp=window["window_label"],
             severity=_qwen_action_score(window, "note_reading"),
-            confidence=window["quality_control"]["confidence"],
+            confidence=_downgrade_confidence_for_modality("note_reading", window["quality_control"], window["quality_control"]["confidence"]),
             evidence_text=_action_evidence_summary("note_reading", {"window_label": window["window_label"]}),
         )
 
@@ -991,7 +1063,7 @@ def _draft_strength_candidates(window_df: pd.DataFrame, review_windows: list[dic
                 tag=tag,
                 timestamp=row["window_label"],
                 priority=_strength_signal_score(tag, row),
-                confidence=row["quality_control"]["confidence"],
+                confidence=_downgrade_confidence_for_modality(tag, row["quality_control"], row["quality_control"]["confidence"]),
                 evidence_text=_strength_evidence_summary(tag, row),
             )
 
@@ -1002,7 +1074,7 @@ def _draft_strength_candidates(window_df: pd.DataFrame, review_windows: list[dic
             tag="open_palm_explaining",
             timestamp=window["window_label"],
             priority=_qwen_strength_score(window, "open_palm_explaining"),
-            confidence=window["quality_control"]["confidence"],
+            confidence=_downgrade_confidence_for_modality("open_palm_explaining", window["quality_control"], window["quality_control"]["confidence"]),
             evidence_text=_strength_evidence_summary("open_palm_explaining", {"window_label": window["window_label"]}),
         )
 
@@ -1698,113 +1770,40 @@ def _run_coach_llm(evidence: dict[str, Any], config: CoachingConfig, events_path
     }
     prompt_json = json.dumps(prompt_payload, indent=2, ensure_ascii=True)
 
-    if is_gemini_model(config.coach_model):
-        try:
-            parsed, _raw_text = generate_gemini_json(
-                model_name=config.coach_model,
-                system_instruction=COACHING_GEMINI_SYSTEM_INSTRUCTION,
-                user_text=prompt_json,
-                max_output_tokens=1600,
-                temperature=0.0,
-                response_json_schema=COACHING_REPORT_SCHEMA,
-            )
-        except Exception as exc:
-            log_event(events_path, "coaching_llm_inference_failed", reason=f"{type(exc).__name__}: {exc}", model=config.coach_model)
-            return None
-
-        report = _build_llm_report(
-            parsed,
-            source_mode="llm_api",
+    try:
+        parsed, _raw_text = generate_gemini_json(
             model_name=config.coach_model,
-            evidence=evidence,
-            config=config,
+            system_instruction=COACHING_GEMINI_SYSTEM_INSTRUCTION,
+            user_text=prompt_json,
+            max_output_tokens=1600,
+            temperature=0.0,
+            response_json_schema=COACHING_REPORT_SCHEMA,
         )
-        if not _validate_llm_report(report):
-            hybrid = _merge_llm_report_with_fallback(
-                report,
-                evidence=evidence,
-                config=config,
-                model_name=config.coach_model,
-            )
-            log_event(
-                events_path,
-                "coaching_llm_partial_output",
-                reason="Schema-valid Gemini output did not satisfy feedback_first_v1 validation; merged onto deterministic fallback.",
-                model=config.coach_model,
-            )
-            return hybrid
-        log_event(events_path, "coaching_llm_completed", model=config.coach_model, action_count=len(report["priority_actions"]))
-        return report
-
-    try:
-        import torch
-        from transformers import AutoModelForCausalLM, AutoTokenizer
     except Exception as exc:
-        log_event(events_path, "coaching_llm_unavailable", reason=f"Missing text-model deps: {type(exc).__name__}: {exc}")
+        log_event(events_path, "coaching_llm_inference_failed", reason=f"{type(exc).__name__}: {exc}", model=config.coach_model)
         return None
-
-    device = config.coach_device
-    if device.startswith("cuda") and not torch.cuda.is_available():
-        device = "cpu"
-    torch_dtype = torch.bfloat16 if device.startswith("cuda") else torch.float32
-
-    try:
-        tokenizer = AutoTokenizer.from_pretrained(config.coach_model, trust_remote_code=True)
-        model = AutoModelForCausalLM.from_pretrained(
-            config.coach_model,
-            torch_dtype=torch_dtype,
-            low_cpu_mem_usage=True,
-            trust_remote_code=True,
-        ).to(device)
-        model.eval()
-    except Exception as exc:
-        log_event(events_path, "coaching_llm_load_failed", reason=f"{type(exc).__name__}: {exc}", model=config.coach_model)
-        return None
-
-    messages = [
-        {"role": "system", "content": COACHING_PROMPT},
-        {"role": "user", "content": prompt_json},
-    ]
-
-    try:
-        if hasattr(tokenizer, "apply_chat_template"):
-            prompt_text = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-        else:
-            prompt_text = COACHING_PROMPT + "\n\n" + prompt_json
-        inputs = tokenizer(prompt_text, return_tensors="pt")
-        inputs = {key: value.to(device) for key, value in inputs.items()}
-        with torch.inference_mode():
-            generated = model.generate(
-                **inputs,
-                do_sample=True,
-                temperature=0.2,
-                max_new_tokens=900,
-            )
-        generated = generated[:, inputs["input_ids"].shape[1] :]
-        decoded = tokenizer.batch_decode(generated, skip_special_tokens=True, clean_up_tokenization_spaces=True)[0]
-        parsed = _extract_json_blob(decoded)
-    except Exception as exc:
-        event_name = "coaching_llm_invalid_output" if isinstance(exc, (json.JSONDecodeError, ValueError)) else "coaching_llm_inference_failed"
-        log_event(events_path, event_name, reason=f"{type(exc).__name__}: {exc}", model=config.coach_model)
-        return None
-    finally:
-        try:
-            del model
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
-        except Exception:
-            pass
 
     report = _build_llm_report(
         parsed,
-        source_mode="llm",
+        source_mode="llm_api",
         model_name=config.coach_model,
         evidence=evidence,
         config=config,
     )
     if not _validate_llm_report(report):
-        log_event(events_path, "coaching_llm_invalid_output", model=config.coach_model)
-        return None
+        hybrid = _merge_llm_report_with_fallback(
+            report,
+            evidence=evidence,
+            config=config,
+            model_name=config.coach_model,
+        )
+        log_event(
+            events_path,
+            "coaching_llm_partial_output",
+            reason="Schema-valid Gemini output did not satisfy feedback_first_v1 validation; merged onto deterministic fallback.",
+            model=config.coach_model,
+        )
+        return hybrid
     log_event(events_path, "coaching_llm_completed", model=config.coach_model, action_count=len(report["priority_actions"]))
     return report
 
@@ -1822,12 +1821,6 @@ def _markdown_table(headers: list[str], rows: list[list[str]]) -> str:
 def _render_markdown(report: dict[str, Any], evidence: dict[str, Any], artifacts: CoachingArtifacts) -> str:
     lines = [
         "# Teacher Coaching Brief",
-        "",
-        f"- Source clip: `{evidence['run_context']['clip_video']}`",
-        f"- Analyzed duration: `{evidence['run_context']['duration_sec_actual']:.2f}s`",
-        f"- Window count: `{evidence['run_context']['window_count']}`",
-        f"- Report mode: `{report['source']['mode']}`",
-        f"- Report shape: `{report.get('report_shape_version', REPORT_SHAPE_VERSION)}`",
         "",
         "## At a Glance",
         "",
@@ -1958,10 +1951,6 @@ def _render_markdown(report: dict[str, Any], evidence: dict[str, Any], artifacts
         if window:
             lines.append(f"QC confidence: `{window['quality_control']['confidence']}`")
             lines.append("")
-
-    lines.extend(["## Reliability Notes", ""])
-    for note in report["confidence_notes"]:
-        lines.append(f"- {note}")
 
     if report["keep_doing"]:
         lines.extend(["", "## Keep Doing", ""])
@@ -2121,12 +2110,8 @@ def run_coaching_report(
             enabled=True,
             qwen_enabled=True,
             qwen_model=config.qwen_model,
-            qwen_device=config.qwen_device,
-            qwen_device_map=config.qwen_device_map,
-            qwen_dtype=config.qwen_dtype,
             qwen_max_new_tokens=config.qwen_max_new_tokens,
             qwen_temperature=config.qwen_temperature,
-            sam2_enabled=False,
         )
         qwen_result = _run_qwen(
             qwen_samples,
