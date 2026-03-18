@@ -1,0 +1,27 @@
+{
+  "source": {
+    "mode": "llm_api",
+    "model": "gemini-2.5-flash"
+  },
+  "report_shape_version": "feedback_first_v1",
+  "executive_summary": "This report is based on limited evidence, so all observations should be considered with low confidence. The primary areas to watch include facial tone, room scanning, audience orientation, and gesture size. There are no strong positive signals in this short clip, but no material interventions are needed at this time.",
+  "no_material_intervention_needed": true,
+  "no_material_intervention_needed_reason": "Evidence quality is too limited to justify corrective feedback in this clip.",
+  "top_strengths": [],
+  "strength_inventory": [],
+  "priority_actions": [],
+  "additional_observation_inventory": [],
+  "low_confidence_watchlist": [],
+  "keep_doing": [],
+  "watch_for": [
+    "Soften the visible facial tone",
+    "Deliberately sweep the room",
+    "Turn back toward the audience sooner",
+    "Tighten the peak size of gestures"
+  ],
+  "confidence_notes": [
+    "[\"Face visibility is limited in parts of the clip, so eye-contact and facial-tone claims are less certain.\", \"Hand visibility drops in parts of the clip, so gesture labels are less certain.\", \"Pose coverage dropped below 95%",
+    "posture and gesture"
+  ],
+  "evidence_moments": []
+}

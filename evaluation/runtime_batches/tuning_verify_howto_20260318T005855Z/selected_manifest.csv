@@ -1,0 +1,2 @@
+clip_id,title,url,channel,duration_sec,selection_reason,priority_tier,start_hint_sec,extraction_policy,notes,goldset_candidate,manifest_index
+mit_ocw_how_to_speak_300_360,mit ocw how to speak 300 360,file:///tmp/howto_verify_clip/mit_ocw_how_to_speak_300_360.mp4,MIT OCW,59.99,workspace_local_clip,A,0.0,pre_extracted_60s_clip,Registered from /workspace/clips for fast validation and frontend debugging.,True,0

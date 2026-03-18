@@ -1,0 +1,24 @@
+{
+  "source": {
+    "mode": "llm_api",
+    "model": "gemini-2.5-flash"
+  },
+  "report_shape_version": "feedback_first_v1",
+  "executive_summary": "This report identifies strengths in maintaining an alert room presence and distributing engagement. Opportunities for growth include refining gesture size, softening facial tone, and ensuring a more open stance and audience-facing orientation after checks. The feedback is based on limited evidence, so observations are presented as watch items.",
+  "no_material_intervention_needed": true,
+  "no_material_intervention_needed_reason": "Evidence quality is too limited to justify corrective feedback in this clip.",
+  "top_strengths": [],
+  "strength_inventory": [],
+  "priority_actions": [],
+  "additional_observation_inventory": [],
+  "low_confidence_watchlist": [],
+  "keep_doing": [
+    "Keep the same quick room checks that make the lecture feel attentive.",
+    "Reuse the left-center-right room sweep that already looks natural."
+  ],
+  "watch_for": [
+    "[\""
+  ],
+  "confidence_notes": [],
+  "evidence_moments": []
+}

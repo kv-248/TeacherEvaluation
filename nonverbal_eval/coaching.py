@@ -365,8 +365,11 @@ def _window_base_tags(row: dict[str, Any], kind: str) -> list[str]:
         if row["excessive_animation_risk"] >= float(cfg["excessive_animation_risk_min"]):
             tags.append("over_animated_delivery")
         if (
-            row["positive_affect_score"] < float(cfg["positive_affect_low_max"])
-            or row["tension_hostility_risk"] >= float(cfg["tension_hostility_risk_min"])
+            row["face_coverage"] >= float(cfg["affect_face_coverage_min"])
+            and (
+                row["positive_affect_score"] < float(cfg["positive_affect_low_max"])
+                or row["tension_hostility_risk"] >= float(cfg["tension_hostility_risk_min"])
+            )
         ):
             tags.append("tense_or_neutral_affect")
         if row["alertness_score"] < float(cfg["alertness_low_max"]):
@@ -644,6 +647,41 @@ def _augment_tags_with_qwen(tags: list[str], qwen_window: dict[str, Any]) -> lis
         tags.append("closed_posture")
     if aggregate.get("audience_focus_ratio", 0.0) >= 0.55:
         tags.append("distributed_room_engagement")
+    return _unique_strings(tags)
+
+
+def _merge_qwen_into_window_tags(window: dict[str, Any], qwen_window: dict[str, Any]) -> list[str]:
+    tags = list(window.get("evidence_tags", []))
+    if qwen_window.get("status") != "completed":
+        return _unique_strings(tags)
+
+    aggregate = qwen_window.get("aggregate", {})
+    metrics = window.get("metrics", {})
+    qc = window.get("quality_control", {})
+
+    if aggregate.get("notes_focus_ratio", 0.0) >= 0.5 or aggregate.get("reading_from_notes_ratio", 0.0) >= 0.5:
+        tags.append("note_reading")
+    if aggregate.get("open_palm_explaining_ratio", 0.0) >= 0.5:
+        tags.append("open_palm_explaining")
+    if aggregate.get("audience_focus_ratio", 0.0) >= 0.55:
+        tags.append("distributed_room_engagement")
+    if (
+        aggregate.get("static_stance_ratio", 0.0) >= 0.5
+        and float(metrics.get("static_behavior_risk", 0.0)) >= float(_BASE_THRESHOLDS["coaching"]["window_tags"]["static_behavior_risk_min"])
+    ):
+        tags.append("limited_movement")
+    if (
+        aggregate.get("tense_affect_ratio", 0.0) >= 0.5
+        and float(qc.get("face_coverage", 0.0)) >= float(_BASE_THRESHOLDS["coaching"]["window_tags"]["affect_face_coverage_min"])
+        and float(metrics.get("tension_hostility_risk", 0.0)) >= float(_BASE_THRESHOLDS["coaching"]["window_tags"]["tension_hostility_risk_min"])
+    ):
+        tags.append("tense_or_neutral_affect")
+    if (
+        aggregate.get("closed_or_slouched_ratio", 0.0) >= 0.5
+        and float(metrics.get("closed_posture_risk", 0.0)) >= float(_BASE_THRESHOLDS["coaching"]["window_tags"]["closed_posture_risk_min"])
+    ):
+        tags.append("closed_posture")
+
     return _unique_strings(tags)
 
 
@@ -1034,6 +1072,36 @@ def _no_material_reason(
     return "No sustained issue repeated strongly enough to justify a corrective action."
 
 
+def _prefer_maintenance_mode(
+    summary: dict[str, Any],
+    corrective_actions: list[dict[str, Any]],
+    top_strengths: list[dict[str, Any]],
+) -> bool:
+    if not corrective_actions or not top_strengths:
+        return False
+
+    cfg = _report_shape_thresholds()
+    scores = summary["scores"]
+    strong_foundation = (
+        float(scores["heuristic_nonverbal_score"]) >= float(cfg["maintenance_overall_min"])
+        and float(scores["confidence_presence_score"]) >= float(cfg["maintenance_presence_min"])
+        and float(scores["eye_contact_distribution_score"]) >= float(cfg["maintenance_eye_distribution_min"])
+        and float(scores["alertness_score"]) >= float(cfg["maintenance_alertness_min"])
+    )
+    if not strong_foundation:
+        return False
+
+    allowed_tags = {"limited_movement", "tense_or_neutral_affect", "closed_posture"}
+    if any(item["tag"] not in allowed_tags for item in corrective_actions):
+        return False
+    if any(item["confidence"] == "high" for item in corrective_actions):
+        return False
+    if any(float(item["max_severity"]) >= 60.0 for item in corrective_actions):
+        return False
+
+    return True
+
+
 def _build_evidence_payload(
     summary: dict[str, Any],
     window_df: pd.DataFrame,
@@ -1059,10 +1127,12 @@ def _build_evidence_payload(
     ][: int(cfg["top_strength_limit"])]
     strength_inventory = strength_candidates[: int(cfg["strength_inventory_limit"])]
     priority_actions = corrective_actions[: max(config.coach_top_actions, 1)]
+    if _prefer_maintenance_mode(summary, priority_actions, top_strengths):
+        priority_actions = []
     no_material_intervention_needed = not priority_actions
     no_material_intervention_needed_reason = (
         _no_material_reason(
-            watchlist_candidates,
+            corrective_actions if no_material_intervention_needed and corrective_actions else watchlist_candidates,
             clip_duration_sec=float(summary["clip"]["duration_sec_actual"]),
             reliability_label=reliability["label"],
         )
@@ -1081,13 +1151,14 @@ def _build_evidence_payload(
         for item in watchlist_candidates[: int(cfg["watchlist_limit"])]
     ]
     additional_observation_inventory: list[dict[str, Any]] = []
-    for item in corrective_actions[max(config.coach_top_actions, 1) :]:
+    deferred_actions = corrective_actions if no_material_intervention_needed else corrective_actions[max(config.coach_top_actions, 1) :]
+    for item in deferred_actions:
         additional_observation_inventory.append(
             {
-                "kind": "action_opportunity",
+                "kind": "refinement_observation" if no_material_intervention_needed else "action_opportunity",
                 "title": item["title"],
                 "evidence": item["what_we_saw"],
-                "suggested_response": item["what_to_try_next"],
+                "suggested_response": item["what_to_monitor_next"] if no_material_intervention_needed else item["what_to_try_next"],
                 "timestamps": item["timestamps"],
                 "confidence": item["confidence"],
             }
@@ -1463,7 +1534,7 @@ def _merge_llm_report_with_fallback(
         merged["top_strengths"] = llm_report["top_strengths"]
     if llm_report.get("strength_inventory"):
         merged["strength_inventory"] = llm_report["strength_inventory"]
-    if llm_report.get("priority_actions"):
+    if llm_report.get("priority_actions") and not evidence.get("no_material_intervention_needed"):
         merged["priority_actions"] = llm_report["priority_actions"]
     if llm_report.get("additional_observation_inventory"):
         merged["additional_observation_inventory"] = llm_report["additional_observation_inventory"]
@@ -1478,7 +1549,11 @@ def _merge_llm_report_with_fallback(
     if llm_report.get("evidence_moments"):
         merged["evidence_moments"] = llm_report["evidence_moments"]
 
-    if llm_report.get("no_material_intervention_needed") and _has_text(llm_report.get("no_material_intervention_needed_reason")):
+    if evidence.get("no_material_intervention_needed"):
+        merged["no_material_intervention_needed"] = True
+        merged["no_material_intervention_needed_reason"] = evidence["no_material_intervention_needed_reason"]
+        merged["priority_actions"] = []
+    elif llm_report.get("no_material_intervention_needed") and _has_text(llm_report.get("no_material_intervention_needed_reason")):
         merged["no_material_intervention_needed"] = True
         merged["no_material_intervention_needed_reason"] = llm_report["no_material_intervention_needed_reason"]
         merged["priority_actions"] = []
@@ -1501,14 +1576,22 @@ def _fallback_report(evidence: dict[str, Any], config: CoachingConfig) -> dict[s
     if not confidence_notes:
         confidence_notes = ["The evidence is sufficient for formative coaching, but still heuristic."]
 
-    executive_parts = [
-        evidence["overall_profile"]["pattern_summary"],
-        f"Best visible window: {evidence['overall_profile']['best_window']['label']}.",
-    ]
-    if actions:
-        executive_parts.append(f"Highest-priority adjustment: {actions[0]['title'].lower()}.")
+    executive_parts: list[str]
+    if evidence["no_material_intervention_needed"] and strengths:
+        executive_parts = [
+            f"This clip is mostly a maintenance case: {strengths[0]['title'].lower()} is already visible.",
+            evidence["overall_profile"]["pattern_summary"],
+            "No material intervention is required from this segment; use the observation inventory as light refinement guidance.",
+        ]
     else:
-        executive_parts.append("No material intervention needed from this clip; use the watchlist and strengths as maintenance guidance.")
+        executive_parts = [
+            evidence["overall_profile"]["pattern_summary"],
+            f"Best visible window: {evidence['overall_profile']['best_window']['label']}.",
+        ]
+        if actions:
+            executive_parts.append(f"Highest-priority adjustment: {actions[0]['title'].lower()}.")
+        else:
+            executive_parts.append("No material intervention needed from this clip; use the watchlist and strengths as maintenance guidance.")
 
     report = {
         "source": {
@@ -2055,7 +2138,7 @@ def run_coaching_report(
             for window in review_windows:
                 qwen_window = _summarize_qwen_window(grouped_annotations.get(window["id"], []))
                 window["qwen"] = qwen_window
-                window["evidence_tags"] = _augment_tags_with_qwen(window["evidence_tags"], qwen_window)
+                window["evidence_tags"] = _merge_qwen_into_window_tags(window, qwen_window)
                 window["primary_tag"] = _primary_tag(window["evidence_tags"], window["kind"])
                 qwen_by_window[window["id"]] = qwen_window
         else:

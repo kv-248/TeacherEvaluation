@@ -72,6 +72,7 @@ face_coverage_action_max = 0.85
 
 [coaching.window_tags]
 face_coverage_low_max = 0.85
+affect_face_coverage_min = 0.90
 eye_distribution_low_max = 55.0
 audience_orientation_low_max = 55.0
 presence_low_max = 60.0
@@ -97,6 +98,10 @@ material_avg_severity_min = 42.0
 single_window_material_clip_min_sec = 45.0
 single_window_material_severity_min = 72.0
 watchlist_severity_min = 30.0
+maintenance_overall_min = 55.0
+maintenance_presence_min = 75.0
+maintenance_eye_distribution_min = 70.0
+maintenance_alertness_min = 75.0
 top_strength_priority_min = 72.0
 strength_inventory_min_priority = 60.0
 top_strength_limit = 4

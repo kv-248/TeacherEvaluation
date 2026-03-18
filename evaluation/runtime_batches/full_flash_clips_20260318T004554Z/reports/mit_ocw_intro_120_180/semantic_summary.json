@@ -1,0 +1,77 @@
+{
+  "sample_count": 8,
+  "sample_timestamps_sec": [
+    0.0,
+    2.67,
+    12.0,
+    18.0,
+    29.96,
+    34.42,
+    47.92,
+    59.67
+  ],
+  "sample_reasons": [
+    "clip_start,uniform_sample,peak_posture",
+    "peak_audience_orientation",
+    "uniform_sample",
+    "uniform_sample",
+    "clip_midpoint,uniform_sample,peak_gesture_motion",
+    "low_audience_orientation,uniform_sample",
+    "peak_smile_proxy,uniform_sample",
+    "clip_end"
+  ],
+  "qwen": {
+    "status": "completed",
+    "reason": "Gemini semantic analysis completed.",
+    "aggregate": {
+      "sample_count": 8,
+      "audience_focus_ratio": 0.75,
+      "board_focus_ratio": 0.0,
+      "screen_focus_ratio": 0.25,
+      "notes_focus_ratio": 0.0,
+      "open_palm_explaining_ratio": 0.125,
+      "static_stance_ratio": 0.875,
+      "pointing_ratio": 0.0,
+      "writing_ratio": 0.0,
+      "warm_affect_ratio": 0.0,
+      "tense_affect_ratio": 0.0,
+      "closed_or_slouched_ratio": 0.0,
+      "focus_counts": {
+        "audience": 6,
+        "screen": 2
+      },
+      "action_counts": {
+        "static_stance": 7,
+        "open_palm_explaining": 1
+      },
+      "affect_counts": {
+        "neutral": 8
+      },
+      "posture_counts": {
+        "upright_neutral": 7,
+        "upright_open": 1
+      }
+    }
+  },
+  "sam2": {
+    "status": "skipped",
+    "reason": "SAM2 semantic analysis disabled.",
+    "aggregate": {}
+  },
+  "agreement": {
+    "status": "available",
+    "label": "aligned",
+    "base_audience_orientation_ratio": 0.759,
+    "qwen_audience_focus_ratio": 0.75,
+    "difference": 0.009,
+    "note": "This agreement check is qualitative and does not change base scores."
+  },
+  "semantic_extensions": {
+    "audience_focus_ratio_qwen": 0.75,
+    "board_or_screen_focus_ratio_qwen": 0.25,
+    "warm_affect_ratio_qwen": 0.0,
+    "tense_affect_ratio_qwen": 0.0,
+    "static_stance_ratio_qwen": 0.875,
+    "pointing_ratio_qwen": 0.0
+  }
+}

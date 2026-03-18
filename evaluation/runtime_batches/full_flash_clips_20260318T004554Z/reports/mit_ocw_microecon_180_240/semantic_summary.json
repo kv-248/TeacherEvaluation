@@ -1,0 +1,81 @@
+{
+  "sample_count": 8,
+  "sample_timestamps_sec": [
+    0.0,
+    5.5,
+    12.0,
+    21.17,
+    29.96,
+    36.0,
+    48.0,
+    59.67
+  ],
+  "sample_reasons": [
+    "clip_start,uniform_sample",
+    "peak_audience_orientation,uniform_sample",
+    "uniform_sample",
+    "peak_gesture_motion",
+    "clip_midpoint,uniform_sample",
+    "uniform_sample",
+    "uniform_sample",
+    "clip_end"
+  ],
+  "qwen": {
+    "status": "completed",
+    "reason": "Gemini semantic analysis completed.",
+    "aggregate": {
+      "sample_count": 8,
+      "audience_focus_ratio": 0.375,
+      "board_focus_ratio": 0.125,
+      "screen_focus_ratio": 0.0,
+      "notes_focus_ratio": 0.25,
+      "open_palm_explaining_ratio": 0.25,
+      "static_stance_ratio": 0.5,
+      "pointing_ratio": 0.0,
+      "writing_ratio": 0.0,
+      "warm_affect_ratio": 0.0,
+      "tense_affect_ratio": 0.0,
+      "closed_or_slouched_ratio": 0.25,
+      "focus_counts": {
+        "audience": 3,
+        "notes": 2,
+        "ambiguous": 2,
+        "board": 1
+      },
+      "action_counts": {
+        "static_stance": 4,
+        "open_palm_explaining": 2,
+        "reading_from_notes": 2
+      },
+      "affect_counts": {
+        "neutral": 8
+      },
+      "posture_counts": {
+        "upright_neutral": 4,
+        "upright_open": 2,
+        "closed_or_slouched": 2
+      }
+    }
+  },
+  "sam2": {
+    "status": "skipped",
+    "reason": "SAM2 semantic analysis disabled.",
+    "aggregate": {}
+  },
+  "agreement": {
+    "status": "available",
+    "label": "mostly_aligned",
+    "base_audience_orientation_ratio": 0.54,
+    "qwen_audience_focus_ratio": 0.375,
+    "difference": 0.165,
+    "note": "This agreement check is qualitative and does not change base scores."
+  },
+  "semantic_extensions": {
+    "audience_focus_ratio_qwen": 0.375,
+    "board_or_screen_focus_ratio_qwen": 0.125,
+    "warm_affect_ratio_qwen": 0.0,
+    "tense_affect_ratio_qwen": 0.0,
+    "static_stance_ratio_qwen": 0.5,
+    "pointing_ratio_qwen": 0.0
+  }
+}

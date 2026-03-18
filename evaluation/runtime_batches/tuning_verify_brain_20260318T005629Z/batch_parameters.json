@@ -1,0 +1,15 @@
+{
+  "source_dir": "/tmp/brain_verify_clip",
+  "clips_root": "/workspace/TeacherEvaluation/evaluation/local_data/clips",
+  "runs_root": "/workspace/TeacherEvaluation/evaluation/local_data/runs/gemini_flash_local",
+  "analysis_fps": 12.0,
+  "window_sec": 15.0,
+  "window_step_sec": 15.0,
+  "qwen_model": "gemini-2.5-flash",
+  "coach_model": "gemini-2.5-flash",
+  "clip_ids": "",
+  "priority_tiers": "",
+  "goldset_only": false,
+  "limit": 0,
+  "selection_count": 1
+}
