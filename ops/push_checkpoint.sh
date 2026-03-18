@@ -68,12 +68,41 @@ fi
 mkdir -p "$STATE_ROOT"
 LOG_FILE="${STATE_ROOT}/push_checkpoint.log"
 LOCK_DIR="${STATE_ROOT}/lock"
+LOCK_PID_FILE="${LOCK_DIR}/pid"
 
-if ! mkdir "$LOCK_DIR" 2>/dev/null; then
-  log_line "another checkpoint push is already running; exiting"
+acquire_lock() {
+  if mkdir "$LOCK_DIR" 2>/dev/null; then
+    printf '%s\n' "$$" >"$LOCK_PID_FILE"
+    return 0
+  fi
+
+  if [[ -f "$LOCK_PID_FILE" ]]; then
+    local lock_pid
+    lock_pid="$(cat "$LOCK_PID_FILE" 2>/dev/null || true)"
+    if [[ -n "$lock_pid" ]] && kill -0 "$lock_pid" 2>/dev/null; then
+      log_line "another checkpoint push is already running; exiting"
+      exit 0
+    fi
+  fi
+
+  rm -rf "$LOCK_DIR"
+  if mkdir "$LOCK_DIR" 2>/dev/null; then
+    printf '%s\n' "$$" >"$LOCK_PID_FILE"
+    log_line "reclaimed stale checkpoint lock"
+    return 0
+  fi
+
+  log_line "could not acquire checkpoint lock; exiting"
   exit 0
-fi
-trap 'rmdir "$LOCK_DIR" >/dev/null 2>&1 || true' EXIT
+}
+
+release_lock() {
+  rm -f "$LOCK_PID_FILE" >/dev/null 2>&1 || true
+  rmdir "$LOCK_DIR" >/dev/null 2>&1 || true
+}
+
+acquire_lock
+trap 'release_lock' EXIT
 
 cd "$REPO_ROOT"
 
