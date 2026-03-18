@@ -105,25 +105,39 @@ SCHEDULE_FILE="${RUN_STATE_DIR}/schedule.txt"
 PRIMARY_TARGET="$(date -u -d "+${PRIMARY_DELAY_SEC} seconds" '+%Y-%m-%d %H:%M:%S UTC')"
 SECONDARY_TARGET="$(date -u -d "+${SECONDARY_DELAY_SEC} seconds" '+%Y-%m-%d %H:%M:%S UTC')"
 
-nohup "$REMOVE_SCRIPT" \
-  --pod-id "$POD_ID" \
-  --env-file "$ENV_FILE" \
-  --start-after-sec "$PRIMARY_DELAY_SEC" \
-  --retries "$RETRIES" \
-  --retry-delay-sec "$RETRY_DELAY_SEC" \
-  --log-file "$PRIMARY_LOG" \
-  >/dev/null 2>&1 &
+setsid bash -lc \
+  '"$0" --pod-id "$1" --env-file "$2" --start-after-sec "$3" --retries "$4" --retry-delay-sec "$5" --log-file "$6"' \
+  "$REMOVE_SCRIPT" \
+  "$POD_ID" \
+  "$ENV_FILE" \
+  "$PRIMARY_DELAY_SEC" \
+  "$RETRIES" \
+  "$RETRY_DELAY_SEC" \
+  "$PRIMARY_LOG" \
+  >/dev/null 2>&1 < /dev/null &
 echo "$!" > "$PRIMARY_PID_FILE"
 
-nohup "$REMOVE_SCRIPT" \
-  --pod-id "$POD_ID" \
-  --env-file "$ENV_FILE" \
-  --start-after-sec "$SECONDARY_DELAY_SEC" \
-  --retries "$RETRIES" \
-  --retry-delay-sec "$RETRY_DELAY_SEC" \
-  --log-file "$SECONDARY_LOG" \
-  >/dev/null 2>&1 &
+setsid bash -lc \
+  '"$0" --pod-id "$1" --env-file "$2" --start-after-sec "$3" --retries "$4" --retry-delay-sec "$5" --log-file "$6"' \
+  "$REMOVE_SCRIPT" \
+  "$POD_ID" \
+  "$ENV_FILE" \
+  "$SECONDARY_DELAY_SEC" \
+  "$RETRIES" \
+  "$RETRY_DELAY_SEC" \
+  "$SECONDARY_LOG" \
+  >/dev/null 2>&1 < /dev/null &
 echo "$!" > "$SECONDARY_PID_FILE"
+
+sleep 2
+ps -p "$(cat "$PRIMARY_PID_FILE")" >/dev/null 2>&1 || {
+  printf 'Primary auto-remove watchdog failed to stay alive.\n' >&2
+  exit 1
+}
+ps -p "$(cat "$SECONDARY_PID_FILE")" >/dev/null 2>&1 || {
+  printf 'Secondary auto-remove watchdog failed to stay alive.\n' >&2
+  exit 1
+}
 
 printf 'armed_at=%s\npod_id=%s\nprimary_target=%s\nsecondary_target=%s\nprimary_pid=%s\nsecondary_pid=%s\n' \
   "$(timestamp_utc)" \

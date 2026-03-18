@@ -70,7 +70,7 @@ if [[ "$RUN_IMMEDIATELY" == "true" ]]; then
   RUN_NOW_FLAG="yes"
 fi
 
-nohup bash -lc '
+setsid bash -lc '
 set -euo pipefail
 repo_root="$1"
 state_root="$2"
@@ -86,8 +86,14 @@ while true; do
   "$push_script" --repo-root "$repo_root" --state-root "$state_root" >>"$log_file" 2>&1 || true
 done
 ' _ "$REPO_ROOT" "$STATE_ROOT" "$INTERVAL_SEC" "$PUSH_SCRIPT" "$RUN_NOW_FLAG" \
-  >/dev/null 2>&1 &
+  >/dev/null 2>&1 < /dev/null &
 echo "$!" > "$SCHEDULER_PID_FILE"
+
+sleep 2
+ps -p "$(cat "$SCHEDULER_PID_FILE")" >/dev/null 2>&1 || {
+  printf 'Periodic push scheduler failed to stay alive.\n' >&2
+  exit 1
+}
 
 printf 'repo_root=%s\ninterval_sec=%s\nscheduler_pid=%s\nlog_file=%s\n' \
   "$REPO_ROOT" \
