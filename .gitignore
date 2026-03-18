@@ -11,3 +11,4 @@ __pycache__/
 .DS_Store
 artifacts/test_*/
 local_data/
+evaluation/runtime_batches/
