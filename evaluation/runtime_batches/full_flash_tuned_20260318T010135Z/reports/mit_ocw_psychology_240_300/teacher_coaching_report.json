@@ -1,0 +1,30 @@
+{
+  "source": {
+    "mode": "llm_api",
+    "model": "gemini-2.5-flash"
+  },
+  "report_shape_version": "feedback_first_v1",
+  "executive_summary": "The instructor demonstrates a confident and upright presence with good room engagement. While some gestures appear larger than necessary, and movement is generally limited, the overall evidence quality is low, so no material interventions are suggested at this time. Focus on maintaining current strengths.",
+  "no_material_intervention_needed": true,
+  "no_material_intervention_needed_reason": "Evidence quality is too limited to justify corrective feedback in this clip.",
+  "top_strengths": [],
+  "strength_inventory": [],
+  "priority_actions": [],
+  "additional_observation_inventory": [],
+  "low_confidence_watchlist": [],
+  "keep_doing": [
+    "Maintain an upright, settled stance.",
+    "Continue to distribute your attention across the room.",
+    "Keep quick room checks to show attentiveness."
+  ],
+  "watch_for": [
+    "Gesture size matching the importance of the point.",
+    "Key explanation beats having visible gesture cues."
+  ],
+  "confidence_notes": [
+    "[\"Face visibility is limited in parts of the clip, so eye-contact and facial-tone claims are less certain.\", \"Hand visibility drops in parts of the clip, so gesture labels are less certain.\", \"Pose coverage dropped below 95%",
+    "posture and gesture scores are less stable.\", \"Face coverage dropped below 95%",
+    "audience orientation and facial scores are less stable.\", \"Hand coverage dropped below 85"
+  ],
+  "evidence_moments": []
+}

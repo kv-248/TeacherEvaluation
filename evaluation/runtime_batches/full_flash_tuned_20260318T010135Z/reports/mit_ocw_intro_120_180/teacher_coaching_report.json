@@ -1,0 +1,152 @@
+{
+  "source": {
+    "mode": "llm_api_hybrid",
+    "model": "gemini-2.5-flash"
+  },
+  "report_shape_version": "feedback_first_v1",
+  "executive_summary": "This session shows strong room presence and a welcoming demeanor, with good distribution of attention. A key area for development is opening up posture between teaching points. Additionally, consider refining gesture size to match the importance of the point being made.",
+  "no_material_intervention_needed": false,
+  "no_material_intervention_needed_reason": "",
+  "top_strengths": [
+    {
+      "title": "Alert room presence",
+      "evidence": "00:00-00:15 kept the head and eyes visibly engaged with the room. 00:15-00:30 kept the head and eyes visibly engaged with the room.",
+      "what_to_repeat": "Keep the same quick room checks that make the lecture feel attentive.",
+      "timestamps": [
+        "00:00-00:15",
+        "00:15-00:30",
+        "00:30-00:45",
+        "00:45-01:00"
+      ],
+      "confidence": "high"
+    },
+    {
+      "title": "Distributed room engagement",
+      "evidence": "00:00-00:15 showed attention moving across more than one part of the room. 00:30-00:45 showed attention moving across more than one part of the room.",
+      "what_to_repeat": "Reuse the left-center-right room sweep that already looks natural.",
+      "timestamps": [
+        "00:00-00:15",
+        "00:30-00:45",
+        "00:45-01:00"
+      ],
+      "confidence": "high"
+    },
+    {
+      "title": "Welcoming visible tone",
+      "evidence": "00:00-00:15 showed a more approachable visible facial tone. 00:15-00:30 showed a more approachable visible facial tone.",
+      "what_to_repeat": "Keep the same relaxed facial reset that reads approachable on camera.",
+      "timestamps": [
+        "00:00-00:15",
+        "00:15-00:30",
+        "00:30-00:45",
+        "00:45-01:00"
+      ],
+      "confidence": "high"
+    }
+  ],
+  "strength_inventory": [
+    {
+      "title": "Alert room presence",
+      "evidence": "00:00-00:15 kept the head and eyes visibly engaged with the room. 00:15-00:30 kept the head and eyes visibly engaged with the room.",
+      "what_to_repeat": "Keep the same quick room checks that make the lecture feel attentive.",
+      "timestamps": [
+        "00:00-00:15",
+        "00:15-00:30",
+        "00:30-00:45",
+        "00:45-01:00"
+      ],
+      "confidence": "high"
+    },
+    {
+      "title": "Distributed room engagement",
+      "evidence": "00:00-00:15 showed attention moving across more than one part of the room. 00:30-00:45 showed attention moving across more than one part of the room.",
+      "what_to_repeat": "Reuse the left-center-right room sweep that already looks natural.",
+      "timestamps": [
+        "00:00-00:15",
+        "00:30-00:45",
+        "00:45-01:00"
+      ],
+      "confidence": "high"
+    },
+    {
+      "title": "Welcoming visible tone",
+      "evidence": "00:00-00:15 showed a more approachable visible facial tone. 00:15-00:30 showed a more approachable visible facial tone.",
+      "what_to_repeat": "Keep the same relaxed facial reset that reads approachable on camera.",
+      "timestamps": [
+        "00:00-00:15",
+        "00:15-00:30",
+        "00:30-00:45",
+        "00:45-01:00"
+      ],
+      "confidence": "high"
+    }
+  ],
+  "priority_actions": [
+    {
+      "title": "Open the stance between points",
+      "why_it_matters": "A more open posture tends to read as more confident and easier to approach.",
+      "what_we_saw": "00:00-00:15 showed a more guarded arm-and-shoulder position between teaching points. 00:15-00:30 showed a more guarded arm-and-shoulder position between teaching points.",
+      "what_to_try_next": "Let the elbows open slightly and release any folded or guarded arm positions between points.",
+      "timestamps": [
+        "00:00-00:15",
+        "00:15-00:30",
+        "00:30-00:45"
+      ],
+      "confidence": "high"
+    }
+  ],
+  "additional_observation_inventory": [
+    {
+      "kind": "watch_item",
+      "title": "Tighten the peak size of gestures",
+      "evidence": "00:30-00:45 had gesture peaks that looked larger than the teaching point required.",
+      "suggested_response": "Check whether gesture size matches the importance of the point instead of peaking on routine lines.",
+      "timestamps": [
+        "00:30-00:45"
+      ],
+      "confidence": "medium"
+    }
+  ],
+  "low_confidence_watchlist": [
+    {
+      "title": "Tighten the peak size of gestures",
+      "why_watch": "The signal is visible, but it is not yet sustained enough to justify real corrective feedback.",
+      "what_we_saw": "00:30-00:45 had gesture peaks that looked larger than the teaching point required.",
+      "what_to_monitor_next": "Check whether gesture size matches the importance of the point instead of peaking on routine lines.",
+      "timestamps": [
+        "00:30-00:45"
+      ],
+      "confidence": "medium"
+    }
+  ],
+  "keep_doing": [
+    "Keep the same quick room checks that make the lecture feel attentive.",
+    "Reuse the left-center-right room sweep that already looks natural.",
+    "Keep the same relaxed facial reset that reads approachable on camera."
+  ],
+  "watch_for": [
+    "Check whether transitions keep the elbows and shoulders open instead of folding inward.",
+    "Check whether gesture size matches the importance of the point instead of peaking on routine lines."
+  ],
+  "confidence_notes": [
+    "Tracking quality is stable enough for formative review, but the outputs remain heuristic proxies rather than direct teaching-quality measures."
+  ],
+  "evidence_moments": [
+    {
+      "timestamp": "00:30-00:45",
+      "headline": "Closed Posture",
+      "observed_behavior": "closed posture / over animated delivery",
+      "metric_evidence": "Overall 57.1; room scan 83.8; presence 57.5; natural movement 22.2.",
+      "qwen_interpretation": "Qwen sees the teacher mainly addressing the audience; stance is often static.",
+      "coaching_implication": "Let the elbows open slightly and release any folded or guarded arm positions between points."
+    },
+    {
+      "timestamp": "00:15-00:30",
+      "headline": "Welcoming Affect",
+      "observed_behavior": "welcoming affect / alert room presence",
+      "metric_evidence": "Overall 69.6; room scan 69.5; presence 65.2; natural movement 49.1.",
+      "qwen_interpretation": "stance is often static.",
+      "coaching_implication": "Keep the same relaxed facial reset that reads approachable on camera."
+    }
+  ]
+}

@@ -1,0 +1,104 @@
+{
+  "source": {
+    "mode": "llm_api",
+    "model": "gemini-2.5-flash"
+  },
+  "report_shape_version": "feedback_first_v1",
+  "executive_summary": "The teacher demonstrates strong presence and engagement, maintaining an alert and upright posture while distributing attention across the room. The primary area for growth is incorporating more purposeful gestures to emphasize key points, as movement was generally limited. Focusing on deliberate, open explanatory gestures can enhance engagement and clarity.",
+  "no_material_intervention_needed": false,
+  "no_material_intervention_needed_reason": "",
+  "top_strengths": [
+    {
+      "title": "Alert room presence",
+      "evidence": "00:00-00:15 kept the head and eyes visibly engaged with the room. 00:15-00:30 kept the head and eyes visibly engaged with the room.",
+      "what_to_repeat": "Keep the same quick room checks that make the lecture feel attentive.",
+      "timestamps": [
+        "00:00-00:15",
+        "00:15-00:30",
+        "00:30-00:45",
+        "00:45-01:00"
+      ],
+      "confidence": "medium"
+    },
+    {
+      "title": "Upright confident presence",
+      "evidence": "00:00-00:15 held an upright, settled stance rather than a collapsed or guarded one. 00:15-00:30 held an upright, settled stance rather than a collapsed or guarded one.",
+      "what_to_repeat": "Keep the same upright, settled stance between points and transitions.",
+      "timestamps": [
+        "00:00-00:15",
+        "00:15-00:30",
+        "00:30-00:45",
+        "00:45-01:00"
+      ],
+      "confidence": "medium"
+    },
+    {
+      "title": "Distributed room engagement",
+      "evidence": "00:00-00:15 showed attention moving across more than one part of the room. 00:15-00:30 showed attention moving across more than one part of the room.",
+      "what_to_repeat": "Reuse the left-center-right room sweep that already looks natural.",
+      "timestamps": [
+        "00:00-00:15",
+        "00:15-00:30",
+        "00:30-00:45",
+        "00:45-01:00"
+      ],
+      "confidence": "medium"
+    }
+  ],
+  "strength_inventory": [],
+  "priority_actions": [
+    {
+      "title": "Add more purposeful gesture emphasis",
+      "why_it_matters": "Too little movement can flatten emphasis and make key ideas feel less animated.",
+      "what_we_saw": "00:00-00:15 stayed physically still through explanation beats that could carry more emphasis. 00:15-00:30 stayed physically still through explanation beats that could carry more emphasis.",
+      "what_to_try_next": "Choose one or two moments per minute where you deliberately use an open explanatory gesture.",
+      "timestamps": [
+        "00:00-00:15",
+        "00:15-00:30",
+        "00:30-00:45",
+        "00:45-01:00"
+      ],
+      "confidence": "medium"
+    }
+  ],
+  "additional_observation_inventory": [],
+  "low_confidence_watchlist": [],
+  "keep_doing": [
+    "Keep the same quick room checks that make the lecture feel attentive.",
+    "Keep the same upright, settled stance between points and transitions.",
+    "Reuse the left-center-right room sweep that already looks natural."
+  ],
+  "watch_for": [
+    "Check whether key explanation beats now have one visible gesture cue instead of a static stance."
+  ],
+  "confidence_notes": [
+    "Hand visibility drops in parts of the clip, so gesture labels are less certain.",
+    "Hand coverage dropped below 85%; gesture classification is less stable."
+  ],
+  "evidence_moments": [
+    {
+      "timestamp": "00:15-00:30",
+      "headline": "Limited Movement",
+      "observed_behavior": "limited movement",
+      "metric_evidence": "Overall 58.2; room scan 76.9; presence 89.2; natural movement 34.1.",
+      "qwen_interpretation": "Qwen sees the teacher mainly addressing the audience; stance is often static; visible affect leans tense; posture looks closed or slouched in several samples.",
+      "coaching_implication": "Choose one or two moments per minute where you deliberately use an open explanatory gesture."
+    },
+    {
+      "timestamp": "00:45-01:00",
+      "headline": "Distributed Room Engagement",
+      "observed_behavior": "distributed room engagement / upright confident presence / alert room presence",
+      "metric_evidence": "Overall 59.4; room scan 82.1; presence 90.0; natural movement 31.9.",
+      "qwen_interpretation": "Qwen sees the teacher mainly addressing the audience; stance is often static.",
+      "coaching_implication": "Reuse the left-center-right room sweep that already looks natural."
+    },
+    {
+      "timestamp": "00:30-00:45",
+      "headline": "Limited Movement",
+      "observed_behavior": "limited movement / distributed room engagement",
+      "metric_evidence": "Overall 58.5; room scan 83.2; presence 88.2; natural movement 35.8.",
+      "qwen_interpretation": "Qwen sees the teacher mainly addressing the audience; stance is often static.",
+      "coaching_implication": "Choose one or two moments per minute where you deliberately use an open explanatory gesture."
+    }
+  ]
+}

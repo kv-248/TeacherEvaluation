@@ -1,0 +1,122 @@
+# Teacher Coaching Brief
+
+- Source clip: `/workspace/TeacherEvaluation/evaluation/local_data/runs/gemini_flash_local/cs50_business_150_210/run_20260318T010139Z/full_segment_reference.mp4`
+- Analyzed duration: `59.92s`
+- Window count: `4`
+- Report mode: `llm_api_hybrid`
+- Report shape: `feedback_first_v1`
+
+## At a Glance
+
+This session highlights strengths in open-palm explanatory gestures and an alert room presence. Opportunities exist to refine gesture size, open posture between points, and consistently reorient towards the audience after checks. Addressing these areas can enhance clarity and audience connection.
+
+Reliability: medium.
+
+## Top 3 Actions for the Next Lecture
+
+### 1. Tighten the peak size of gestures
+
+- Why it matters: Large bursts of motion can distract from the teaching point when they are not tightly timed.
+- What we saw: 00:00-00:15 had gesture peaks that looked larger than the teaching point required. 00:15-00:30 had gesture peaks that looked larger than the teaching point required.
+- What to try next: Keep big gestures for true emphasis and use smaller controlled hand movements elsewhere.
+- Review at: 00:00-00:15, 00:15-00:30, 00:30-00:45, 00:45-01:00
+- Confidence: medium
+
+### 2. Open the stance between points
+
+- Why it matters: A more open posture tends to read as more confident and easier to approach.
+- What we saw: 00:00-00:15 showed a more guarded arm-and-shoulder position between teaching points. 00:30-00:45 showed a more guarded arm-and-shoulder position between teaching points.
+- What to try next: Let the elbows open slightly and release any folded or guarded arm positions between points.
+- Review at: 00:00-00:15, 00:30-00:45
+- Confidence: medium
+
+### 3. Turn back toward the audience sooner
+
+- Why it matters: Audience-facing body orientation supports perceived connection and makes eye-contact cues more visible.
+- What we saw: 00:00-00:15 spent longer than needed turned away from the audience after checks. 00:15-00:30 spent longer than needed turned away from the audience after checks.
+- What to try next: After each board or note check, reset your shoulders and chin back toward the room.
+- Review at: 00:00-00:15, 00:15-00:30, 00:30-00:45, 00:45-01:00
+- Confidence: medium
+
+## Strengths to Preserve
+
+### Open-palm explanatory delivery
+
+- Evidence: 00:00-00:15 included open-palm explanatory gestures that supported the explanation. 00:15-00:30 included open-palm explanatory gestures that supported the explanation.
+- What to repeat: Keep the same open-palm gesture shape when emphasizing key ideas.
+- Review at: 00:00-00:15, 00:15-00:30
+- Confidence: medium
+
+### Alert room presence
+
+- Evidence: 00:15-00:30 kept the head and eyes visibly engaged with the room. 00:30-00:45 kept the head and eyes visibly engaged with the room.
+- What to repeat: Keep the same quick room checks that make the lecture feel attentive.
+- Review at: 00:15-00:30, 00:30-00:45
+- Confidence: medium
+
+
+## Moment-by-Moment Evidence
+
+### 00:00-00:15 - Low Audience Orientation
+
+![Evidence frame](coaching_moments/moment_01_0000_0015.jpg)
+
+- Observed behavior: low audience orientation / closed posture / over animated delivery
+- Metric evidence: Overall 43.1; room scan 64.3; presence 52.5; natural movement 15.8.
+- Qwen interpretation: Qwen sees the teacher mainly addressing the audience; open-palm explanatory gestures recur.
+- Coaching implication: After each board or note check, reset your shoulders and chin back toward the room.
+
+QC confidence: `medium`
+
+### 00:15-00:30 - Distributed Room Engagement
+
+![Evidence frame](coaching_moments/moment_02_0015_0030.jpg)
+
+- Observed behavior: alert room presence / open palm explaining / distributed room engagement
+- Metric evidence: Overall 47.6; room scan 67.2; presence 73.3; natural movement 15.8.
+- Qwen interpretation: Qwen sees the teacher mainly addressing the audience; open-palm explanatory gestures recur.
+- Coaching implication: Reuse the left-center-right room sweep that already looks natural.
+
+QC confidence: `low`
+
+### 00:45-01:00 - Low Audience Orientation
+
+![Evidence frame](coaching_moments/moment_03_0045_0100.jpg)
+
+- Observed behavior: low face visibility / low audience orientation / over animated delivery
+- Metric evidence: Overall 45.9; room scan 67.4; presence 68.5; natural movement 15.8.
+- Qwen interpretation: stance is often static.
+- Coaching implication: After each board or note check, reset your shoulders and chin back toward the room.
+
+QC confidence: `low`
+
+## Reliability Notes
+
+- Face visibility was limited in parts of the clip, so eye-contact and facial-tone claims are less certain.
+- Face coverage dropped below 95%; audience orientation and facial scores are less stable.
+- Hand coverage dropped below 85%; gesture classification is less stable.
+
+## Keep Doing
+
+- Keep using open-palm gestures to emphasize key ideas.
+- Maintain quick room checks to show attentiveness.
+
+## Watch For
+
+- Gesture size matching the importance of the point.
+- Open elbow and shoulder positions during transitions.
+- Quick shoulder and chin resets back to the room after board/note checks.
+
+## Technical Appendix
+
+| Metric | Value | Band |
+| --- | --- | --- |
+| Overall score | 46.6 | limited |
+| Natural movement | 15.8 | limited |
+| Eye-contact distribution | 68.2 | moderate |
+| Confidence/presence | 68.5 | moderate |
+
+- Raw metric summary: `summary_full.md`
+- Window summary: `window_summary.md`
+- Semantic summary: `semantic_extensions/semantic_summary.md` if semantic mode was enabled for the run
+- Coaching evidence JSON: `coaching_evidence.json`

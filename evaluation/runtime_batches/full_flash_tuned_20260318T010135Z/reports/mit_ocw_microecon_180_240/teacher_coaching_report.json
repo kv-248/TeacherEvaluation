@@ -1,0 +1,25 @@
+{
+  "source": {
+    "mode": "llm_api",
+    "model": "gemini-2.5-flash"
+  },
+  "report_shape_version": "feedback_first_v1",
+  "executive_summary": "This report highlights strengths in open-palm delivery and alert, distributed room engagement. The primary areas for development involve refining gesture size, maintaining an open stance, and consistently reorienting towards the audience after looking away. The feedback is based on limited evidence, so consider these observations as areas to monitor.",
+  "no_material_intervention_needed": true,
+  "no_material_intervention_needed_reason": "Evidence quality is too limited to justify corrective feedback in this clip.",
+  "top_strengths": [],
+  "strength_inventory": [],
+  "priority_actions": [],
+  "additional_observation_inventory": [],
+  "low_confidence_watchlist": [],
+  "keep_doing": [
+    "Keep the same open-palm gesture shape when emphasizing key ideas.",
+    "Keep the same quick room checks that make the lecture feel attentive.",
+    "Reuse the left-center-right room sweep that already looks natural."
+  ],
+  "watch_for": [
+    "[\"Check whether"
+  ],
+  "confidence_notes": [],
+  "evidence_moments": []
+}

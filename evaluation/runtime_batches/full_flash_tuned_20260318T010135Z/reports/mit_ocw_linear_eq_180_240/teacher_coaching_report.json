@@ -1,0 +1,28 @@
+{
+  "source": {
+    "mode": "llm_api",
+    "model": "gemini-2.5-flash"
+  },
+  "report_shape_version": "feedback_first_v1",
+  "executive_summary": "This report is based on limited evidence, so all feedback should be considered a low-confidence watch list. The primary areas to monitor are room engagement, ensuring a more even scan and quicker return to audience-facing orientation. Also, observe gesture size and posture to ensure they support teaching points effectively. No material interventions are suggested due to the low reliability of the data.",
+  "no_material_intervention_needed": true,
+  "no_material_intervention_needed_reason": "Evidence quality is too limited to justify corrective feedback in this clip.",
+  "top_strengths": [],
+  "strength_inventory": [],
+  "priority_actions": [],
+  "additional_observation_inventory": [],
+  "low_confidence_watchlist": [],
+  "keep_doing": [],
+  "watch_for": [
+    "Uneven room scan",
+    "Low audience orientation",
+    "Over-animated delivery",
+    "Closed posture"
+  ],
+  "confidence_notes": [
+    "[\"Face visibility is limited in parts of the clip, so eye-contact and facial-tone claims are less certain.\", \"Hand visibility drops in parts of the clip, so gesture labels are less certain.\", \"Pose coverage dropped below 95%",
+    "posture and gesture scores are less stable.\", \"Face coverage dropped below 95%",
+    "audience orientation and"
+  ],
+  "evidence_moments": []
+}
