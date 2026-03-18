@@ -1,0 +1,124 @@
+{
+  "source": {
+    "mode": "llm_api",
+    "model": "gemini-2.5-flash"
+  },
+  "report_shape_version": "feedback_first_v1",
+  "executive_summary": "This session shows strong room presence and distributed engagement. Consider refining gesture size to match emphasis and softening facial tone for a warmer delivery. These adjustments can enhance clarity and approachability, building on your existing strengths in maintaining audience connection.",
+  "no_material_intervention_needed": false,
+  "no_material_intervention_needed_reason": "",
+  "top_strengths": [
+    {
+      "title": "Alert room presence",
+      "evidence": "00:00-00:15 kept the head and eyes visibly engaged with the room. 00:15-00:30 kept the head and eyes visibly engaged with the room.",
+      "what_to_repeat": "Keep the same quick room checks that make the lecture feel attentive.",
+      "timestamps": [
+        "00:00-00:15",
+        "00:15-00:30",
+        "00:30-00:45",
+        "00:45-01:00"
+      ],
+      "confidence": "high"
+    },
+    {
+      "title": "Distributed room engagement",
+      "evidence": "00:00-00:15 showed attention moving across more than one part of the room. 00:15-00:30 showed attention moving across more than one part of the room.",
+      "what_to_repeat": "Reuse the left-center-right room sweep that already looks natural.",
+      "timestamps": [
+        "00:00-00:15",
+        "00:15-00:30",
+        "00:45-01:00"
+      ],
+      "confidence": "high"
+    }
+  ],
+  "strength_inventory": [
+    {
+      "title": "Alert room presence",
+      "evidence": "00:00-00:15 kept the head and eyes visibly engaged with the room. 00:15-00:30 kept the head and eyes visibly engaged with the room.",
+      "what_to_repeat": "Keep the same quick room checks that make the lecture feel attentive.",
+      "timestamps": [
+        "00:00-00:15",
+        "00:15-00:30",
+        "00:30-00:45",
+        "00:45-01:00"
+      ],
+      "confidence": "high"
+    },
+    {
+      "title": "Distributed room engagement",
+      "evidence": "00:00-00:15 showed attention moving across more than one part of the room. 00:15-00:30 showed attention moving across more than one part of the room.",
+      "what_to_repeat": "Reuse the left-center-right room sweep that already looks natural.",
+      "timestamps": [
+        "00:00-00:15",
+        "00:15-00:30",
+        "00:45-01:00"
+      ],
+      "confidence": "high"
+    }
+  ],
+  "priority_actions": [
+    {
+      "title": "Tighten the peak size of gestures",
+      "why_it_matters": "Large bursts of motion can distract from the teaching point when they are not tightly timed.",
+      "what_we_saw": "00:00-00:15 had gesture peaks that looked larger than the teaching point required. 00:15-00:30 had gesture peaks that looked larger than the teaching point required.",
+      "what_to_try_next": "Keep big gestures for true emphasis and use smaller controlled hand movements elsewhere.",
+      "timestamps": [
+        "00:00-00:15",
+        "00:15-00:30",
+        "00:45-01:00"
+      ],
+      "confidence": "high"
+    },
+    {
+      "title": "Soften the visible facial tone",
+      "why_it_matters": "A more relaxed facial tone can make explanations feel warmer and less guarded.",
+      "what_we_saw": "00:00-00:15 showed a flatter or tighter visible facial tone than the rest of the clip. 00:45-01:00 showed a flatter or tighter visible facial tone than the rest of the clip.",
+      "what_to_try_next": "Reset the face between sentences and let the expression relax before the next point.",
+      "timestamps": [
+        "00:00-00:15",
+        "00:45-01:00"
+      ],
+      "confidence": "high"
+    }
+  ],
+  "additional_observation_inventory": [],
+  "low_confidence_watchlist": [],
+  "keep_doing": [
+    "Keep the same quick room checks that make the lecture feel attentive.",
+    "Reuse the left-center-right room sweep that already looks natural."
+  ],
+  "watch_for": [
+    "Check whether gesture size matches the importance of the point instead of peaking on routine lines.",
+    "Check whether the face resets between points instead of staying tight through the whole sentence."
+  ],
+  "confidence_notes": [
+    "Face coverage dropped below 95%; audience orientation and facial scores are less stable."
+  ],
+  "evidence_moments": [
+    {
+      "timestamp": "00:15-00:30",
+      "headline": "Over Animated Delivery",
+      "observed_behavior": "low face visibility / over animated delivery",
+      "metric_evidence": "Overall 51.0; room scan 70.4; presence 70.8; natural movement 28.1.",
+      "qwen_interpretation": "stance is often static.",
+      "coaching_implication": "Keep big gestures for true emphasis and use smaller controlled hand movements elsewhere."
+    },
+    {
+      "timestamp": "00:30-00:45",
+      "headline": "Distributed Room Engagement",
+      "observed_behavior": "alert room presence / distributed room engagement",
+      "metric_evidence": "Overall 59.6; room scan 65.3; presence 78.8; natural movement 51.6.",
+      "qwen_interpretation": "Qwen sees the teacher mainly addressing the audience; stance is often static.",
+      "coaching_implication": "Reuse the left-center-right room sweep that already looks natural."
+    },
+    {
+      "timestamp": "00:00-00:15",
+      "headline": "Over Animated Delivery",
+      "observed_behavior": "over animated delivery / tense or neutral affect / open palm explaining",
+      "metric_evidence": "Overall 55.9; room scan 82.3; presence 84.5; natural movement 25.4.",
+      "qwen_interpretation": "Qwen sees the teacher mainly addressing the audience; open-palm explanatory gestures recur.",
+      "coaching_implication": "Keep big gestures for true emphasis and use smaller controlled hand movements elsewhere."
+    }
+  ]
+}

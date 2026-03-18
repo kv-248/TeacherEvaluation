@@ -1,0 +1,114 @@
+{
+  "source": {
+    "mode": "llm_api",
+    "model": "gemini-2.5-flash"
+  },
+  "report_shape_version": "feedback_first_v1",
+  "executive_summary": "The instructor demonstrates strong room presence and engagement, effectively using open-palm gestures. Opportunities exist to refine gesture size for emphasis and to ensure quicker re-orientation towards the audience after board or note checks.",
+  "no_material_intervention_needed": false,
+  "no_material_intervention_needed_reason": "",
+  "top_strengths": [
+    {
+      "title": "Open-palm explanatory delivery",
+      "evidence": "00:45-01:00 included open-palm explanatory gestures that supported the explanation.",
+      "what_to_repeat": "Keep the same open-palm gesture shape when emphasizing key ideas.",
+      "timestamps": [
+        "00:45-01:00"
+      ],
+      "confidence": "medium"
+    },
+    {
+      "title": "Alert room presence",
+      "evidence": "00:00-00:15 kept the head and eyes visibly engaged with the room. 00:15-00:30 kept the head and eyes visibly engaged with the room.",
+      "what_to_repeat": "Keep the same quick room checks that make the lecture feel attentive.",
+      "timestamps": [
+        "00:00-00:15",
+        "00:15-00:30",
+        "00:30-00:45",
+        "00:45-01:00"
+      ],
+      "confidence": "high"
+    },
+    {
+      "title": "Distributed room engagement",
+      "evidence": "00:00-00:15 showed attention moving across more than one part of the room. 00:30-00:45 showed attention moving across more than one part of the room.",
+      "what_to_repeat": "Reuse the left-center-right room sweep that already looks natural.",
+      "timestamps": [
+        "00:00-00:15",
+        "00:30-00:45",
+        "00:45-01:00"
+      ],
+      "confidence": "high"
+    }
+  ],
+  "strength_inventory": [
+    {
+      "title": "Upright confident presence",
+      "evidence": "00:45-01:00 held an upright, settled stance rather than a collapsed or guarded one.",
+      "what_to_repeat": "Keep the same upright, settled stance between points and transitions.",
+      "timestamps": [
+        "00:45-01:00"
+      ],
+      "confidence": "medium"
+    }
+  ],
+  "priority_actions": [
+    {
+      "title": "Tighten the peak size of gestures",
+      "why_it_matters": "Large bursts of motion can distract from the teaching point when they are not tightly timed.",
+      "what_we_saw": "00:00-00:15 had gesture peaks that looked larger than the teaching point required. 00:15-00:30 had gesture peaks that looked larger than the teaching point required.",
+      "what_to_try_next": "Keep big gestures for true emphasis and use smaller controlled hand movements elsewhere.",
+      "timestamps": [
+        "00:00-00:15",
+        "00:15-00:30",
+        "00:30-00:45",
+        "00:45-01:00"
+      ],
+      "confidence": "high"
+    }
+  ],
+  "additional_observation_inventory": [],
+  "low_confidence_watchlist": [
+    {
+      "title": "Turn back toward the audience sooner",
+      "why_watch": "The signal is visible, but it is not yet sustained enough to justify real corrective feedback.",
+      "what_we_saw": "00:15-00:30 spent longer than needed turned away from the audience after checks.",
+      "what_to_monitor_next": "Check whether board or note checks end with a quick shoulder-and-chin reset back to the room.",
+      "timestamps": [
+        "00:15-00:30"
+      ],
+      "confidence": "medium"
+    }
+  ],
+  "keep_doing": [
+    "Keep the same open-palm gesture shape when emphasizing key ideas.",
+    "Keep the same quick room checks that make the lecture feel attentive.",
+    "Reuse the left-center-right room sweep that already looks natural.",
+    "Keep the same upright, settled stance between points and transitions."
+  ],
+  "watch_for": [
+    "Check whether gesture size matches the importance of the point instead of peaking on routine lines.",
+    "Check whether board or note checks end with a quick shoulder-and-chin reset back to the room."
+  ],
+  "confidence_notes": [
+    "Tracking quality is stable enough for formative review, but the outputs remain heuristic proxies rather than direct teaching-quality measures."
+  ],
+  "evidence_moments": [
+    {
+      "timestamp": "00:30-00:45",
+      "headline": "Over Animated Delivery",
+      "observed_behavior": "over animated delivery / open palm explaining / distributed room engagement",
+      "metric_evidence": "Overall 53.8; room scan 79.1; presence 75.7; natural movement 28.8.",
+      "qwen_interpretation": "Qwen sees the teacher mainly addressing the audience; open-palm explanatory gestures recur; stance is often static.",
+      "coaching_implication": "Keep big gestures for true emphasis and use smaller controlled hand movements elsewhere."
+    },
+    {
+      "timestamp": "00:45-01:00",
+      "headline": "Distributed Room Engagement",
+      "observed_behavior": "distributed room engagement / upright confident presence / alert room presence",
+      "metric_evidence": "Overall 58.6; room scan 71.8; presence 76.4; natural movement 31.3.",
+      "qwen_interpretation": "Qwen sees the teacher mainly addressing the audience; open-palm explanatory gestures recur.",
+      "coaching_implication": "Reuse the left-center-right room sweep that already looks natural."
+    }
+  ]
+}

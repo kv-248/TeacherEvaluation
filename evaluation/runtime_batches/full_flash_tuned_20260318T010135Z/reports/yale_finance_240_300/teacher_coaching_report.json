@@ -1,0 +1,189 @@
+{
+  "source": {
+    "mode": "llm_api_hybrid",
+    "model": "gemini-2.5-flash"
+  },
+  "report_shape_version": "feedback_first_v1",
+  "executive_summary": "This report highlights strengths in open-palm explanatory gestures and distributed room engagement. Opportunities for growth include refining gesture size, opening posture between points, and reducing extended note-reading. The feedback aims to enhance presence and audience connection through concise, actionable steps.",
+  "no_material_intervention_needed": false,
+  "no_material_intervention_needed_reason": "",
+  "top_strengths": [
+    {
+      "title": "Open-palm explanatory delivery",
+      "evidence": "00:00-00:15 included open-palm explanatory gestures that supported the explanation. 00:45-01:00 included open-palm explanatory gestures that supported the explanation.",
+      "what_to_repeat": "Keep the same open-palm gesture shape when emphasizing key ideas.",
+      "timestamps": [
+        "00:00-00:15",
+        "00:45-01:00"
+      ],
+      "confidence": "medium"
+    },
+    {
+      "title": "Distributed room engagement",
+      "evidence": "00:15-00:30 showed attention moving across more than one part of the room. 00:45-01:00 showed attention moving across more than one part of the room.",
+      "what_to_repeat": "Reuse the left-center-right room sweep that already looks natural.",
+      "timestamps": [
+        "00:15-00:30",
+        "00:45-01:00"
+      ],
+      "confidence": "medium"
+    }
+  ],
+  "strength_inventory": [
+    {
+      "title": "Open-palm explanatory delivery",
+      "evidence": "00:00-00:15 included open-palm explanatory gestures that supported the explanation. 00:45-01:00 included open-palm explanatory gestures that supported the explanation.",
+      "what_to_repeat": "Keep the same open-palm gesture shape when emphasizing key ideas.",
+      "timestamps": [
+        "00:00-00:15",
+        "00:45-01:00"
+      ],
+      "confidence": "medium"
+    },
+    {
+      "title": "Distributed room engagement",
+      "evidence": "00:15-00:30 showed attention moving across more than one part of the room. 00:45-01:00 showed attention moving across more than one part of the room.",
+      "what_to_repeat": "Reuse the left-center-right room sweep that already looks natural.",
+      "timestamps": [
+        "00:15-00:30",
+        "00:45-01:00"
+      ],
+      "confidence": "medium"
+    }
+  ],
+  "priority_actions": [
+    {
+      "title": "Tighten the peak size of gestures",
+      "why_it_matters": "Large bursts of motion can distract from the teaching point when they are not tightly timed.",
+      "what_we_saw": "00:00-00:15 had gesture peaks that looked larger than the teaching point required. 00:15-00:30 had gesture peaks that looked larger than the teaching point required.",
+      "what_to_try_next": "Keep big gestures for true emphasis and use smaller controlled hand movements elsewhere.",
+      "timestamps": [
+        "00:00-00:15",
+        "00:15-00:30",
+        "00:30-00:45",
+        "00:45-01:00"
+      ],
+      "confidence": "medium"
+    },
+    {
+      "title": "Open the stance between points",
+      "why_it_matters": "A more open posture tends to read as more confident and easier to approach.",
+      "what_we_saw": "00:00-00:15 showed a more guarded arm-and-shoulder position between teaching points. 00:30-00:45 showed a more guarded arm-and-shoulder position between teaching points.",
+      "what_to_try_next": "Let the elbows open slightly and release any folded or guarded arm positions between points.",
+      "timestamps": [
+        "00:00-00:15",
+        "00:30-00:45"
+      ],
+      "confidence": "medium"
+    }
+  ],
+  "additional_observation_inventory": [
+    {
+      "kind": "watch_item",
+      "title": "Reduce extended note-reading",
+      "evidence": "00:15-00:30 repeatedly pulled attention down to notes instead of back to the room.",
+      "suggested_response": "Check whether note glances stay brief and return to the room within the same teaching beat.",
+      "timestamps": [
+        "00:15-00:30"
+      ],
+      "confidence": "medium"
+    },
+    {
+      "kind": "watch_item",
+      "title": "Deliberately sweep the room",
+      "evidence": "00:30-00:45 stayed more fixed on one part of the room than on a left-center-right sweep.",
+      "suggested_response": "Check whether the next explanation visibly reaches more than one side of the room.",
+      "timestamps": [
+        "00:30-00:45"
+      ],
+      "confidence": "medium"
+    },
+    {
+      "kind": "watch_item",
+      "title": "Increase room-checking behavior",
+      "evidence": "00:45-01:00 showed fewer quick room checks and a less visibly alert scan.",
+      "suggested_response": "Check whether transitions now include a visible room check before the next explanation.",
+      "timestamps": [
+        "00:45-01:00"
+      ],
+      "confidence": "medium"
+    }
+  ],
+  "low_confidence_watchlist": [
+    {
+      "title": "Reduce extended note-reading",
+      "why_watch": "The signal is visible, but it is not yet sustained enough to justify real corrective feedback.",
+      "what_we_saw": "00:15-00:30 repeatedly pulled attention down to notes instead of back to the room.",
+      "what_to_monitor_next": "Check whether note glances stay brief and return to the room within the same teaching beat.",
+      "timestamps": [
+        "00:15-00:30"
+      ],
+      "confidence": "medium"
+    },
+    {
+      "title": "Deliberately sweep the room",
+      "why_watch": "The signal is visible, but it is not yet sustained enough to justify real corrective feedback.",
+      "what_we_saw": "00:30-00:45 stayed more fixed on one part of the room than on a left-center-right sweep.",
+      "what_to_monitor_next": "Check whether the next explanation visibly reaches more than one side of the room.",
+      "timestamps": [
+        "00:30-00:45"
+      ],
+      "confidence": "medium"
+    },
+    {
+      "title": "Increase room-checking behavior",
+      "why_watch": "The signal is visible, but it is not yet sustained enough to justify real corrective feedback.",
+      "what_we_saw": "00:45-01:00 showed fewer quick room checks and a less visibly alert scan.",
+      "what_to_monitor_next": "Check whether transitions now include a visible room check before the next explanation.",
+      "timestamps": [
+        "00:45-01:00"
+      ],
+      "confidence": "medium"
+    }
+  ],
+  "keep_doing": [
+    "Keep using open-palm gestures to emphasize key ideas.",
+    "Continue to distribute your attention across the room with natural sweeps."
+  ],
+  "watch_for": [
+    "[\"Gesture size that matches the importance of the"
+  ],
+  "confidence_notes": [
+    "Hand visibility drops in parts of the clip, so gesture labels are less certain.",
+    "Hand coverage dropped below 85%; gesture classification is less stable."
+  ],
+  "evidence_moments": [
+    {
+      "timestamp": "00:00-00:15",
+      "headline": "Closed Posture",
+      "observed_behavior": "closed posture / over animated delivery / open palm explaining",
+      "metric_evidence": "Overall 44.0; room scan 55.0; presence 58.5; natural movement 26.2.",
+      "qwen_interpretation": "Qwen sees the teacher mainly addressing the audience; open-palm explanatory gestures recur.",
+      "coaching_implication": "Let the elbows open slightly and release any folded or guarded arm positions between points."
+    },
+    {
+      "timestamp": "00:15-00:30",
+      "headline": "Distributed Room Engagement",
+      "observed_behavior": "distributed room engagement / note reading",
+      "metric_evidence": "Overall 56.5; room scan 82.5; presence 69.9; natural movement 25.5.",
+      "qwen_interpretation": "Qwen sees repeated note-reading or notes-focused attention; stance is often static.",
+      "coaching_implication": "Reuse the left-center-right room sweep that already looks natural."
+    },
+    {
+      "timestamp": "00:45-01:00",
+      "headline": "Over Animated Delivery",
+      "observed_behavior": "over animated delivery / reduced alertness / open palm explaining",
+      "metric_evidence": "Overall 50.0; room scan 74.6; presence 68.4; natural movement 27.2.",
+      "qwen_interpretation": "Qwen sees the teacher mainly addressing the audience; open-palm explanatory gestures recur.",
+      "coaching_implication": "Keep big gestures for true emphasis and use smaller controlled hand movements elsewhere."
+    },
+    {
+      "timestamp": "00:30-00:45",
+      "headline": "Uneven Room Scan",
+      "observed_behavior": "uneven room scan / closed posture / over animated delivery",
+      "metric_evidence": "Overall 47.3; room scan 53.1; presence 53.2; natural movement 28.3.",
+      "qwen_interpretation": "Qwen sees the teacher mainly addressing the audience; stance is often static.",
+      "coaching_implication": "At each major point, pause and sweep left-center-right before moving on."
+    }
+  ]
+}

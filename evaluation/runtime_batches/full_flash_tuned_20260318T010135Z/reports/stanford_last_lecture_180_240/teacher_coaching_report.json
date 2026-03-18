@@ -1,0 +1,32 @@
+{
+  "source": {
+    "mode": "llm_api",
+    "model": "gemini-2.5-flash"
+  },
+  "report_shape_version": "feedback_first_v1",
+  "executive_summary": "The instructor demonstrates strong presence and engagement, utilizing open-palm gestures and distributing attention across the room. While there's a tendency for gestures to be larger than necessary, the overall evidence quality is low, suggesting no immediate intervention is needed. Focus on maintaining current strengths and monitoring gesture size for future refinement.",
+  "no_material_intervention_needed": true,
+  "no_material_intervention_needed_reason": "Evidence quality is too limited to justify corrective feedback in this clip.",
+  "top_strengths": [],
+  "strength_inventory": [],
+  "priority_actions": [],
+  "additional_observation_inventory": [],
+  "low_confidence_watchlist": [],
+  "keep_doing": [
+    "Keep using open-palm gestures to support explanations.",
+    "Maintain alert room checks to show attentiveness.",
+    "Continue to hold an upright, settled stance.",
+    "Reuse the natural left-center-right room sweep."
+  ],
+  "watch_for": [
+    "Gesture size matching the importance of the point."
+  ],
+  "confidence_notes": [
+    "Face visibility is limited in parts of the clip, so eye-contact and facial-tone claims are less certain.",
+    "Hand visibility drops in parts of the clip, so gesture labels are less certain.",
+    "Pose coverage dropped below 95%; posture and gesture scores are less stable.",
+    "Face coverage dropped below 95%; audience orientation and facial scores are less stable.",
+    "Hand coverage dropped below 85%; gesture classification is less stable."
+  ],
+  "evidence_moments": []
+}

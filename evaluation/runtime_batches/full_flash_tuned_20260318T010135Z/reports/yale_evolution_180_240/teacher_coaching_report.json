@@ -1,0 +1,24 @@
+{
+  "source": {
+    "mode": "llm_api",
+    "model": "gemini-2.5-flash"
+  },
+  "report_shape_version": "feedback_first_v1",
+  "executive_summary": "This report highlights strengths in maintaining an alert room presence and distributing engagement. Areas to watch include the size of gestures, ensuring a deliberate room sweep, turning back to the audience sooner, and maintaining an open stance. The overall evidence quality is low, so interventions are not recommended at this time.",
+  "no_material_intervention_needed": true,
+  "no_material_intervention_needed_reason": "Evidence quality is too limited to justify corrective feedback in this clip.",
+  "top_strengths": [],
+  "strength_inventory": [],
+  "priority_actions": [],
+  "additional_observation_inventory": [],
+  "low_confidence_watchlist": [],
+  "keep_doing": [
+    "Keep the same quick room checks that make the lecture feel attentive.",
+    "Reuse the left-center-right room sweep that already looks natural."
+  ],
+  "watch_for": [
+    "[\"Check whether gesture size matches the importance of the point instead of peaking on routine lines.\", \"Check whether the next explanation visibly reaches more than one side of the room.\", \"Check whether board or note checks end with a quick shoulder-and-"
+  ],
+  "confidence_notes": [],
+  "evidence_moments": []
+}

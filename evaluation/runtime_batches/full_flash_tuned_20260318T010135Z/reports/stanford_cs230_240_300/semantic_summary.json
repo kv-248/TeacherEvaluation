@@ -1,0 +1,79 @@
+{
+  "sample_count": 8,
+  "sample_timestamps_sec": [
+    0.0,
+    3.75,
+    12.0,
+    23.08,
+    30.0,
+    36.0,
+    48.0,
+    59.75
+  ],
+  "sample_reasons": [
+    "clip_start,uniform_sample",
+    "low_audience_orientation",
+    "uniform_sample",
+    "peak_gesture_motion,uniform_sample,peak_smile_proxy",
+    "clip_midpoint,uniform_sample,peak_audience_orientation",
+    "uniform_sample",
+    "uniform_sample",
+    "clip_end,uniform_sample"
+  ],
+  "qwen": {
+    "status": "completed",
+    "reason": "Gemini semantic analysis completed.",
+    "aggregate": {
+      "sample_count": 8,
+      "audience_focus_ratio": 0.25,
+      "board_focus_ratio": 0.75,
+      "screen_focus_ratio": 0.0,
+      "notes_focus_ratio": 0.0,
+      "open_palm_explaining_ratio": 0.375,
+      "static_stance_ratio": 0.25,
+      "pointing_ratio": 0.125,
+      "writing_ratio": 0.25,
+      "warm_affect_ratio": 0.0,
+      "tense_affect_ratio": 0.0,
+      "closed_or_slouched_ratio": 0.0,
+      "focus_counts": {
+        "board": 6,
+        "audience": 2
+      },
+      "action_counts": {
+        "open_palm_explaining": 3,
+        "static_stance": 2,
+        "writing_board": 2,
+        "pointing_board": 1
+      },
+      "affect_counts": {
+        "neutral": 8
+      },
+      "posture_counts": {
+        "upright_neutral": 5,
+        "upright_open": 3
+      }
+    }
+  },
+  "sam2": {
+    "status": "skipped",
+    "reason": "SAM2 semantic analysis disabled.",
+    "aggregate": {}
+  },
+  "agreement": {
+    "status": "available",
+    "label": "review",
+    "base_audience_orientation_ratio": 0.723,
+    "qwen_audience_focus_ratio": 0.25,
+    "difference": 0.473,
+    "note": "This agreement check is qualitative and does not change base scores."
+  },
+  "semantic_extensions": {
+    "audience_focus_ratio_qwen": 0.25,
+    "board_or_screen_focus_ratio_qwen": 0.75,
+    "warm_affect_ratio_qwen": 0.0,
+    "tense_affect_ratio_qwen": 0.0,
+    "static_stance_ratio_qwen": 0.25,
+    "pointing_ratio_qwen": 0.125
+  }
+}

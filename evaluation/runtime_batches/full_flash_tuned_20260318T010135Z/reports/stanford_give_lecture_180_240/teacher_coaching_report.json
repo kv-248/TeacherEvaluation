@@ -1,0 +1,110 @@
+{
+  "source": {
+    "mode": "llm_api",
+    "model": "gemini-2.5-flash"
+  },
+  "report_shape_version": "feedback_first_v1",
+  "executive_summary": "The instructor demonstrates strong room engagement and a confident, alert presence. However, there's a tendency for gestures to be larger than necessary, which could be distracting. Focusing on more controlled movements will enhance clarity and impact.",
+  "no_material_intervention_needed": false,
+  "no_material_intervention_needed_reason": "",
+  "top_strengths": [
+    {
+      "title": "Distributed room engagement",
+      "evidence": "00:00-00:15 showed attention moving across more than one part of the room. 00:15-00:30 showed attention moving across more than one part of the room.",
+      "what_to_repeat": "Reuse the left-center-right room sweep that already looks natural.",
+      "timestamps": [
+        "00:00-00:15",
+        "00:15-00:30",
+        "00:30-00:45",
+        "00:45-01:00"
+      ],
+      "confidence": "medium"
+    },
+    {
+      "title": "Alert room presence",
+      "evidence": "00:00-00:15 kept the head and eyes visibly engaged with the room. 00:15-00:30 kept the head and eyes visibly engaged with the room.",
+      "what_to_repeat": "Keep the same quick room checks that make the lecture feel attentive.",
+      "timestamps": [
+        "00:00-00:15",
+        "00:15-00:30",
+        "00:30-00:45",
+        "00:45-01:00"
+      ],
+      "confidence": "medium"
+    },
+    {
+      "title": "Upright confident presence",
+      "evidence": "00:00-00:15 held an upright, settled stance rather than a collapsed or guarded one. 00:15-00:30 held an upright, settled stance rather than a collapsed or guarded one.",
+      "what_to_repeat": "Keep the same upright, settled stance between points and transitions.",
+      "timestamps": [
+        "00:00-00:15",
+        "00:15-00:30"
+      ],
+      "confidence": "medium"
+    }
+  ],
+  "strength_inventory": [],
+  "priority_actions": [
+    {
+      "title": "Tighten the peak size of gestures",
+      "why_it_matters": "Large bursts of motion can distract from the teaching point when they are not tightly timed.",
+      "what_we_saw": "00:00-00:15 had gesture peaks that looked larger than the teaching point required. 00:15-00:30 had gesture peaks that looked larger than the teaching point required.",
+      "what_to_try_next": "Keep big gestures for true emphasis and use smaller controlled hand movements elsewhere.",
+      "timestamps": [
+        "00:00-00:15",
+        "00:15-00:30",
+        "00:30-00:45",
+        "00:45-01:00"
+      ],
+      "confidence": "medium"
+    }
+  ],
+  "additional_observation_inventory": [],
+  "low_confidence_watchlist": [],
+  "keep_doing": [
+    "Reuse the left-center-right room sweep that already looks natural.",
+    "Keep the same quick room checks that make the lecture feel attentive.",
+    "Keep the same upright, settled stance between points and transitions."
+  ],
+  "watch_for": [
+    "Check whether gesture size matches the importance of the point instead of peaking on routine lines."
+  ],
+  "confidence_notes": [
+    "Hand visibility drops in parts of the clip, so gesture labels are less certain.",
+    "Hand coverage dropped below 85%; gesture classification is less stable."
+  ],
+  "evidence_moments": [
+    {
+      "timestamp": "00:45-01:00",
+      "headline": "Over Animated Delivery",
+      "observed_behavior": "over animated delivery / distributed room engagement",
+      "metric_evidence": "Overall 59.5; room scan 85.9; presence 81.4; natural movement 39.8.",
+      "qwen_interpretation": "Qwen sees the teacher mainly addressing the audience; stance is often static.",
+      "coaching_implication": "Keep big gestures for true emphasis and use smaller controlled hand movements elsewhere."
+    },
+    {
+      "timestamp": "00:15-00:30",
+      "headline": "Distributed Room Engagement",
+      "observed_behavior": "distributed room engagement / upright confident presence / alert room presence",
+      "metric_evidence": "Overall 66.3; room scan 93.0; presence 91.8; natural movement 37.0.",
+      "qwen_interpretation": "Qwen sees the teacher mainly addressing the audience; stance is often static.",
+      "coaching_implication": "Reuse the left-center-right room sweep that already looks natural."
+    },
+    {
+      "timestamp": "00:00-00:15",
+      "headline": "Over Animated Delivery",
+      "observed_behavior": "over animated delivery / distributed room engagement",
+      "metric_evidence": "Overall 65.6; room scan 82.6; presence 90.1; natural movement 43.8.",
+      "qwen_interpretation": "Qwen sees the teacher mainly addressing the audience; stance is often static.",
+      "coaching_implication": "Keep big gestures for true emphasis and use smaller controlled hand movements elsewhere."
+    },
+    {
+      "timestamp": "00:30-00:45",
+      "headline": "Over Animated Delivery",
+      "observed_behavior": "over animated delivery / open palm explaining / distributed room engagement",
+      "metric_evidence": "Overall 60.2; room scan 94.2; presence 85.5; natural movement 23.5.",
+      "qwen_interpretation": "Qwen sees the teacher mainly addressing the audience; open-palm explanatory gestures recur; stance is often static.",
+      "coaching_implication": "Keep big gestures for true emphasis and use smaller controlled hand movements elsewhere."
+    }
+  ]
+}

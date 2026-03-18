@@ -1,0 +1,122 @@
+{
+  "source": {
+    "mode": "llm_api",
+    "model": "gemini-2.5-flash"
+  },
+  "report_shape_version": "feedback_first_v1",
+  "executive_summary": "The session shows opportunities to refine nonverbal delivery. Focus on tightening gestures, improving audience orientation after board/note checks, and ensuring a more even room scan. These adjustments can enhance student engagement and perceived connection.",
+  "no_material_intervention_needed": false,
+  "no_material_intervention_needed_reason": "",
+  "top_strengths": [],
+  "strength_inventory": [],
+  "priority_actions": [
+    {
+      "title": "Tighten the peak size of gestures",
+      "why_it_matters": "Large bursts of motion can distract from the teaching point when they are not tightly timed.",
+      "what_we_saw": "00:00-00:15 had gesture peaks that looked larger than the teaching point required. 00:15-00:30 had gesture peaks that looked larger than the teaching point required.",
+      "what_to_try_next": "Keep big gestures for true emphasis and use smaller controlled hand movements elsewhere.",
+      "timestamps": [
+        "00:00-00:15",
+        "00:15-00:30",
+        "00:30-00:45",
+        "00:45-01:00"
+      ],
+      "confidence": "medium"
+    },
+    {
+      "title": "Turn back toward the audience sooner",
+      "why_it_matters": "Audience-facing body orientation supports perceived connection and makes eye-contact cues more visible.",
+      "what_we_saw": "00:00-00:15 spent longer than needed turned away from the audience after checks. 00:15-00:30 spent longer than needed turned away from the audience after checks.",
+      "what_to_try_next": "After each board or note check, reset your shoulders and chin back toward the room.",
+      "timestamps": [
+        "00:00-00:15",
+        "00:15-00:30",
+        "00:30-00:45",
+        "00:45-01:00"
+      ],
+      "confidence": "medium"
+    },
+    {
+      "title": "Deliberately sweep the room",
+      "why_it_matters": "More even attention across the room helps students feel included and keeps engagement distributed.",
+      "what_we_saw": "00:00-00:15 stayed more fixed on one part of the room than on a left-center-right sweep. 00:15-00:30 stayed more fixed on one part of the room than on a left-center-right sweep.",
+      "what_to_try_next": "At each major point, pause and sweep left-center-right before moving on.",
+      "timestamps": [
+        "00:00-00:15",
+        "00:15-00:30",
+        "00:30-00:45",
+        "00:45-01:00"
+      ],
+      "confidence": "medium"
+    }
+  ],
+  "additional_observation_inventory": [
+    {
+      "kind": "watch_item",
+      "title": "Open the stance between points",
+      "evidence": "00:00-00:15 showed a more guarded arm-and-shoulder position between teaching points. 00:15-00:30 showed a more guarded arm-and-shoulder position between teaching points.",
+      "suggested_response": "Check whether transitions keep the elbows and shoulders open instead of folding inward.",
+      "timestamps": [
+        "00:00-00:15",
+        "00:15-00:30",
+        "00:30-00:45",
+        "00:45-01:00"
+      ],
+      "confidence": "medium"
+    }
+  ],
+  "low_confidence_watchlist": [
+    {
+      "title": "Open the stance between points",
+      "why_watch": "The signal is visible, but it is not yet sustained enough to justify real corrective feedback.",
+      "what_we_saw": "00:00-00:15 showed a more guarded arm-and-shoulder position between teaching points. 00:15-00:30 showed a more guarded arm-and-shoulder position between teaching points.",
+      "what_to_monitor_next": "Check whether transitions keep the elbows and shoulders open instead of folding inward.",
+      "timestamps": [
+        "00:00-00:15",
+        "00:15-00:30",
+        "00:30-00:45",
+        "00:45-01:00"
+      ],
+      "confidence": "medium"
+    }
+  ],
+  "keep_doing": [],
+  "watch_for": [
+    "gesture size matching the importance of the point",
+    "quick shoulder-and-chin resets back to the room after board/note checks",
+    "visible sweeps of attention across the room",
+    "open elbows and shoulders during transitions"
+  ],
+  "confidence_notes": [
+    "Face visibility is limited in parts of the clip, so eye-contact and facial-tone claims are less certain.",
+    "Hand visibility drops in parts of the clip, so gesture labels are less certain.",
+    "Face coverage dropped below 95%; audience orientation and facial scores are less stable.",
+    "Hand coverage dropped below 85%; gesture classification is less stable."
+  ],
+  "evidence_moments": [
+    {
+      "timestamp": "00:00-00:15",
+      "headline": "Uneven Room Scan",
+      "observed_behavior": "low face visibility / uneven room scan / low audience orientation",
+      "metric_evidence": "Overall 36.1; room scan 52.5; presence 58.2; natural movement 15.8.",
+      "qwen_interpretation": "Qwen sees the teacher mainly addressing the audience; stance is often static.",
+      "coaching_implication": "At each major point, pause and sweep left-center-right before moving on."
+    },
+    {
+      "timestamp": "00:15-00:30",
+      "headline": "Best Overall",
+      "observed_behavior": "mixed evidence",
+      "metric_evidence": "Overall 41.2; room scan 54.8; presence 64.1; natural movement 19.7.",
+      "qwen_interpretation": "stance is often static.",
+      "coaching_implication": "Keep this visible pattern available as a default during explanation."
+    },
+    {
+      "timestamp": "00:45-01:00",
+      "headline": "Uneven Room Scan",
+      "observed_behavior": "uneven room scan / low audience orientation / closed posture",
+      "metric_evidence": "Overall 37.3; room scan 41.5; presence 64.1; natural movement 15.8.",
+      "qwen_interpretation": "Qwen sees the teacher mainly addressing the audience; stance is often static.",
+      "coaching_implication": "At each major point, pause and sweep left-center-right before moving on."
+    }
+  ]
+}

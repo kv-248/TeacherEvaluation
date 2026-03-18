@@ -1,0 +1,148 @@
+{
+  "source": {
+    "mode": "llm_api_hybrid",
+    "model": "gemini-2.5-flash"
+  },
+  "report_shape_version": "feedback_first_v1",
+  "executive_summary": "This session shows good distributed room engagement. Focus on tightening gesture size to avoid distraction and increasing room-checking behavior for better responsiveness. Also, consider softening your facial tone and ensuring a deliberate room sweep to include all students.",
+  "no_material_intervention_needed": false,
+  "no_material_intervention_needed_reason": "",
+  "top_strengths": [
+    {
+      "title": "Distributed room engagement",
+      "evidence": "00:00-00:15 showed attention moving across more than one part of the room. 00:15-00:30 showed attention moving across more than one part of the room.",
+      "what_to_repeat": "Reuse the left-center-right room sweep that already looks natural.",
+      "timestamps": [
+        "00:00-00:15",
+        "00:15-00:30",
+        "00:30-00:45"
+      ],
+      "confidence": "medium"
+    }
+  ],
+  "strength_inventory": [
+    {
+      "title": "Distributed room engagement",
+      "evidence": "00:00-00:15 showed attention moving across more than one part of the room. 00:15-00:30 showed attention moving across more than one part of the room.",
+      "what_to_repeat": "Reuse the left-center-right room sweep that already looks natural.",
+      "timestamps": [
+        "00:00-00:15",
+        "00:15-00:30",
+        "00:30-00:45"
+      ],
+      "confidence": "medium"
+    }
+  ],
+  "priority_actions": [
+    {
+      "title": "Tighten the peak size of gestures",
+      "why_it_matters": "Large bursts of motion can distract from the teaching point when they are not tightly timed.",
+      "what_we_saw": "00:00-00:15 had gesture peaks that looked larger than the teaching point required. 00:15-00:30 had gesture peaks that looked larger than the teaching point required.",
+      "what_to_try_next": "Keep big gestures for true emphasis and use smaller controlled hand movements elsewhere.",
+      "timestamps": [
+        "00:00-00:15",
+        "00:15-00:30",
+        "00:30-00:45",
+        "00:45-01:00"
+      ],
+      "confidence": "medium"
+    },
+    {
+      "title": "Increase room-checking behavior",
+      "why_it_matters": "Alert room-facing behavior helps the lecture feel more responsive and attentive.",
+      "what_we_saw": "00:00-00:15 showed fewer quick room checks and a less visibly alert scan. 00:15-00:30 showed fewer quick room checks and a less visibly alert scan.",
+      "what_to_try_next": "Build in quick audience checks after transitions instead of staying fixed on notes or a single spot.",
+      "timestamps": [
+        "00:00-00:15",
+        "00:15-00:30",
+        "00:30-00:45",
+        "00:45-01:00"
+      ],
+      "confidence": "medium"
+    }
+  ],
+  "additional_observation_inventory": [
+    {
+      "kind": "watch_item",
+      "title": "Soften the visible facial tone",
+      "evidence": "00:00-00:15 showed a flatter or tighter visible facial tone than the rest of the clip.",
+      "suggested_response": "Check whether the face resets between points instead of staying tight through the whole sentence.",
+      "timestamps": [
+        "00:00-00:15"
+      ],
+      "confidence": "medium"
+    },
+    {
+      "kind": "watch_item",
+      "title": "Deliberately sweep the room",
+      "evidence": "00:45-01:00 stayed more fixed on one part of the room than on a left-center-right sweep.",
+      "suggested_response": "Check whether the next explanation visibly reaches more than one side of the room.",
+      "timestamps": [
+        "00:45-01:00"
+      ],
+      "confidence": "medium"
+    }
+  ],
+  "low_confidence_watchlist": [
+    {
+      "title": "Soften the visible facial tone",
+      "why_watch": "The signal is visible, but it is not yet sustained enough to justify real corrective feedback.",
+      "what_we_saw": "00:00-00:15 showed a flatter or tighter visible facial tone than the rest of the clip.",
+      "what_to_monitor_next": "Check whether the face resets between points instead of staying tight through the whole sentence.",
+      "timestamps": [
+        "00:00-00:15"
+      ],
+      "confidence": "medium"
+    },
+    {
+      "title": "Deliberately sweep the room",
+      "why_watch": "The signal is visible, but it is not yet sustained enough to justify real corrective feedback.",
+      "what_we_saw": "00:45-01:00 stayed more fixed on one part of the room than on a left-center-right sweep.",
+      "what_to_monitor_next": "Check whether the next explanation visibly reaches more than one side of the room.",
+      "timestamps": [
+        "00:45-01:00"
+      ],
+      "confidence": "medium"
+    }
+  ],
+  "keep_doing": [
+    "Reuse the left-center-right room sweep that already looks natural."
+  ],
+  "watch_for": [
+    "Check whether gesture size matches the importance of the point instead of peaking on routine lines.",
+    "Check whether transitions now include a visible room check before the next explanation.",
+    "Check whether the face resets between points instead of staying tight through the whole sentence.",
+    "Check whether the next explanation visibly reaches more than one side of the room."
+  ],
+  "confidence_notes": [
+    "Face visibility is limited in parts of the clip, so eye-contact and facial-tone claims are less certain.",
+    "Face coverage dropped below 95%; audience orientation and facial scores are less stable.",
+    "Hand coverage dropped below 85%; gesture classification is less stable."
+  ],
+  "evidence_moments": [
+    {
+      "timestamp": "00:45-01:00",
+      "headline": "Uneven Room Scan",
+      "observed_behavior": "low face visibility / uneven room scan / over animated delivery",
+      "metric_evidence": "Overall 43.1; room scan 54.1; presence 68.4; natural movement 22.0.",
+      "qwen_interpretation": "Qwen sees the teacher mainly oriented to board or screen content.",
+      "coaching_implication": "At each major point, pause and sweep left-center-right before moving on."
+    },
+    {
+      "timestamp": "00:30-00:45",
+      "headline": "Distributed Room Engagement",
+      "observed_behavior": "distributed room engagement",
+      "metric_evidence": "Overall 52.5; room scan 78.0; presence 80.5; natural movement 24.9.",
+      "qwen_interpretation": "Qwen sees the teacher mainly addressing the audience; stance is often static.",
+      "coaching_implication": "Reuse the left-center-right room sweep that already looks natural."
+    },
+    {
+      "timestamp": "00:15-00:30",
+      "headline": "Over Animated Delivery",
+      "observed_behavior": "low face visibility / over animated delivery / reduced alertness",
+      "metric_evidence": "Overall 47.6; room scan 79.6; presence 73.2; natural movement 19.4.",
+      "qwen_interpretation": "Qwen sees the teacher mainly oriented to board or screen content.",
+      "coaching_implication": "Keep big gestures for true emphasis and use smaller controlled hand movements elsewhere."
+    }
+  ]
+}

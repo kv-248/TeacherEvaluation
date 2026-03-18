@@ -1,0 +1,79 @@
+{
+  "sample_count": 8,
+  "sample_timestamps_sec": [
+    0.0,
+    4.83,
+    18.0,
+    24.0,
+    36.0,
+    38.75,
+    48.0,
+    59.67
+  ],
+  "sample_reasons": [
+    "clip_start,uniform_sample,low_audience_orientation,peak_audience_orientation,peak_posture",
+    "peak_smile_proxy,uniform_sample",
+    "uniform_sample",
+    "uniform_sample",
+    "uniform_sample",
+    "peak_gesture_motion",
+    "uniform_sample",
+    "clip_end"
+  ],
+  "qwen": {
+    "status": "completed",
+    "reason": "Gemini semantic analysis completed.",
+    "aggregate": {
+      "sample_count": 8,
+      "audience_focus_ratio": 0.75,
+      "board_focus_ratio": 0.125,
+      "screen_focus_ratio": 0.0,
+      "notes_focus_ratio": 0.0,
+      "open_palm_explaining_ratio": 0.875,
+      "static_stance_ratio": 0.125,
+      "pointing_ratio": 0.0,
+      "writing_ratio": 0.0,
+      "warm_affect_ratio": 0.25,
+      "tense_affect_ratio": 0.0,
+      "closed_or_slouched_ratio": 0.0,
+      "focus_counts": {
+        "audience": 6,
+        "board": 1,
+        "ambiguous": 1
+      },
+      "action_counts": {
+        "open_palm_explaining": 7,
+        "static_stance": 1
+      },
+      "affect_counts": {
+        "neutral": 6,
+        "warm": 2
+      },
+      "posture_counts": {
+        "upright_open": 6,
+        "upright_neutral": 2
+      }
+    }
+  },
+  "sam2": {
+    "status": "skipped",
+    "reason": "SAM2 semantic analysis disabled.",
+    "aggregate": {}
+  },
+  "agreement": {
+    "status": "available",
+    "label": "mostly_aligned",
+    "base_audience_orientation_ratio": 0.593,
+    "qwen_audience_focus_ratio": 0.75,
+    "difference": 0.157,
+    "note": "This agreement check is qualitative and does not change base scores."
+  },
+  "semantic_extensions": {
+    "audience_focus_ratio_qwen": 0.75,
+    "board_or_screen_focus_ratio_qwen": 0.125,
+    "warm_affect_ratio_qwen": 0.25,
+    "tense_affect_ratio_qwen": 0.0,
+    "static_stance_ratio_qwen": 0.125,
+    "pointing_ratio_qwen": 0.0
+  }
+}
