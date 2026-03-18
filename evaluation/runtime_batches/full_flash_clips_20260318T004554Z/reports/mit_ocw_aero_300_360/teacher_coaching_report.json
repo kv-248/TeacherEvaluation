@@ -1,0 +1,154 @@
+{
+  "source": {
+    "mode": "llm_api_hybrid",
+    "model": "gemini-2.5-flash"
+  },
+  "report_shape_version": "feedback_first_v1",
+  "executive_summary": "This session shows opportunities to refine nonverbal delivery. Focus on tightening gestures, softening facial tone, and ensuring even room engagement. You effectively use open-palm gestures to support explanations. Addressing these areas can enhance student connection and focus. The feedback is based on medium reliability due to some face and hand visibility issues.",
+  "no_material_intervention_needed": false,
+  "no_material_intervention_needed_reason": "",
+  "top_strengths": [
+    {
+      "title": "Open-palm explanatory delivery",
+      "evidence": "00:30-00:45 included open-palm explanatory gestures that supported the explanation. 00:00-00:15 included open-palm explanatory gestures that supported the explanation.",
+      "what_to_repeat": "Keep the same open-palm gesture shape when emphasizing key ideas.",
+      "timestamps": [
+        "00:30-00:45",
+        "00:00-00:15"
+      ],
+      "confidence": "medium"
+    }
+  ],
+  "strength_inventory": [
+    {
+      "title": "Open-palm explanatory delivery",
+      "evidence": "00:30-00:45 included open-palm explanatory gestures that supported the explanation. 00:00-00:15 included open-palm explanatory gestures that supported the explanation.",
+      "what_to_repeat": "Keep the same open-palm gesture shape when emphasizing key ideas.",
+      "timestamps": [
+        "00:30-00:45",
+        "00:00-00:15"
+      ],
+      "confidence": "medium"
+    }
+  ],
+  "priority_actions": [
+    {
+      "title": "Tighten the peak size of gestures",
+      "why_it_matters": "Large bursts of motion can distract from the teaching point when they are not tightly timed.",
+      "what_we_saw": "00:00-00:15 had gesture peaks that looked larger than the teaching point required. 00:15-00:30 had gesture peaks that looked larger than the teaching point required.",
+      "what_to_try_next": "Keep big gestures for true emphasis and use smaller controlled hand movements elsewhere.",
+      "timestamps": [
+        "00:00-00:15",
+        "00:15-00:30",
+        "00:30-00:45",
+        "00:45-01:00"
+      ],
+      "confidence": "medium"
+    },
+    {
+      "title": "Soften the visible facial tone",
+      "why_it_matters": "A more relaxed facial tone can make explanations feel warmer and less guarded.",
+      "what_we_saw": "00:00-00:15 showed a flatter or tighter visible facial tone than the rest of the clip. 00:15-00:30 showed a flatter or tighter visible facial tone than the rest of the clip.",
+      "what_to_try_next": "Reset the face between sentences and let the expression relax before the next point.",
+      "timestamps": [
+        "00:00-00:15",
+        "00:15-00:30",
+        "00:30-00:45",
+        "00:45-01:00"
+      ],
+      "confidence": "medium"
+    },
+    {
+      "title": "Deliberately sweep the room",
+      "why_it_matters": "More even attention across the room helps students feel included and keeps engagement distributed.",
+      "what_we_saw": "00:00-00:15 stayed more fixed on one part of the room than on a left-center-right sweep. 00:15-00:30 stayed more fixed on one part of the room than on a left-center-right sweep.",
+      "what_to_try_next": "At each major point, pause and sweep left-center-right before moving on.",
+      "timestamps": [
+        "00:00-00:15",
+        "00:15-00:30",
+        "00:30-00:45",
+        "00:45-01:00"
+      ],
+      "confidence": "medium"
+    }
+  ],
+  "additional_observation_inventory": [
+    {
+      "kind": "action_opportunity",
+      "title": "Turn back toward the audience sooner",
+      "evidence": "00:00-00:15 spent longer than needed turned away from the audience after checks. 00:15-00:30 spent longer than needed turned away from the audience after checks.",
+      "suggested_response": "After each board or note check, reset your shoulders and chin back toward the room.",
+      "timestamps": [
+        "00:00-00:15",
+        "00:15-00:30",
+        "00:30-00:45",
+        "00:45-01:00"
+      ],
+      "confidence": "medium"
+    },
+    {
+      "kind": "watch_item",
+      "title": "Open the stance between points",
+      "evidence": "00:15-00:30 showed a more guarded arm-and-shoulder position between teaching points.",
+      "suggested_response": "Check whether transitions keep the elbows and shoulders open instead of folding inward.",
+      "timestamps": [
+        "00:15-00:30"
+      ],
+      "confidence": "low"
+    }
+  ],
+  "low_confidence_watchlist": [
+    {
+      "title": "Open the stance between points",
+      "why_watch": "The signal is visible, but it is not yet sustained enough to justify real corrective feedback.",
+      "what_we_saw": "00:15-00:30 showed a more guarded arm-and-shoulder position between teaching points.",
+      "what_to_monitor_next": "Check whether transitions keep the elbows and shoulders open instead of folding inward.",
+      "timestamps": [
+        "00:15-00:30"
+      ],
+      "confidence": "low"
+    }
+  ],
+  "keep_doing": [
+    "Keep the same open-palm gesture shape when emphasizing key ideas.",
+    "Reuse the left-center-right room sweep that already looks natural."
+  ],
+  "watch_for": [
+    "Check whether gesture size matches the importance of the point instead of peaking on routine lines.",
+    "Check whether the face resets between points instead of staying tight through the whole sentence.",
+    "Check whether the next explanation visibly reaches more than one side of the room.",
+    "Check whether board or note checks end with a quick shoulder-and-chin reset back to the room."
+  ],
+  "confidence_notes": [
+    "Face visibility is limited in parts of the clip, so eye-contact and facial-tone claims are less certain.",
+    "Hand visibility drops in parts of the clip, so gesture labels are less certain.",
+    "Face coverage dropped below 95%; audience orientation and facial scores are less stable.",
+    "Hand coverage dropped below 85%; gesture classification is less stable."
+  ],
+  "evidence_moments": [
+    {
+      "timestamp": "00:15-00:30",
+      "headline": "Uneven Room Scan",
+      "observed_behavior": "low face visibility / uneven room scan / low audience orientation",
+      "metric_evidence": "Overall 35.3; room scan 31.1; presence 58.3; natural movement 15.8.",
+      "qwen_interpretation": "Qwen sees the teacher mainly oriented to board or screen content.",
+      "coaching_implication": "At each major point, pause and sweep left-center-right before moving on."
+    },
+    {
+      "timestamp": "00:30-00:45",
+      "headline": "Distributed Room Engagement",
+      "observed_behavior": "open palm explaining / distributed room engagement",
+      "metric_evidence": "Overall 44.8; room scan 31.0; presence 69.0; natural movement 24.7.",
+      "qwen_interpretation": "Qwen sees the teacher mainly addressing the audience; open-palm explanatory gestures recur.",
+      "coaching_implication": "Reuse the left-center-right room sweep that already looks natural."
+    },
+    {
+      "timestamp": "00:00-00:15",
+      "headline": "Uneven Room Scan",
+      "observed_behavior": "low face visibility / uneven room scan / low audience orientation",
+      "metric_evidence": "Overall 38.8; room scan 29.7; presence 69.7; natural movement 15.8.",
+      "qwen_interpretation": "Qwen sees the teacher mainly addressing the audience; open-palm explanatory gestures recur.",
+      "coaching_implication": "At each major point, pause and sweep left-center-right before moving on."
+    }
+  ]
+}
