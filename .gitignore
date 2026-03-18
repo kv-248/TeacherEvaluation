@@ -1,7 +1,3 @@
-.codex/*
-!.codex/config.toml
-!.codex/agents/
-!.codex/agents/**
 __pycache__/
 *.pyc
 *.pyo
