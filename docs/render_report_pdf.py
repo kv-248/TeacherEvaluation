@@ -36,7 +36,8 @@ def _css() -> str:
 
     h2 {
       font-size: 17pt;
-      margin-top: 24px;
+      margin-top: 20px;
+      margin-bottom: 8px;
       border-bottom: 1px solid #b8c6d1;
       padding-bottom: 4px;
     }
@@ -78,6 +79,45 @@ def _css() -> str:
       border: 1px solid #d7e0e6;
     }
 
+    .scorecard {
+      border: 1px solid #c8d4dc;
+      border-radius: 12px;
+      overflow: hidden;
+      margin: 10px 0 18px 0;
+    }
+
+    .scorecard-top {
+      background: linear-gradient(135deg, #103b52, #265d79);
+      color: #ffffff;
+      padding: 16px 18px 14px 18px;
+    }
+
+    .scorecard-label {
+      font-family: "DejaVu Sans", Arial, sans-serif;
+      font-size: 10pt;
+      opacity: 0.9;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .scorecard-score {
+      font-family: "DejaVu Sans", Arial, sans-serif;
+      font-size: 28pt;
+      font-weight: 700;
+      margin-top: 4px;
+    }
+
+    .scorecard-verdict {
+      margin-top: 6px;
+      font-size: 10pt;
+      line-height: 1.4;
+    }
+
+    table.scorecard-badges {
+      margin: 0;
+      border-top: none;
+    }
+
     table {
       width: 100%;
       border-collapse: collapse;
@@ -97,11 +137,38 @@ def _css() -> str:
       text-align: left;
     }
 
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-family: "DejaVu Sans", Arial, sans-serif;
+      font-size: 8.5pt;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+
+    .badge-green {
+      background: #d8f3dc;
+      color: #1b5e20;
+    }
+
+    .badge-amber {
+      background: #fff3cd;
+      color: #8a5a00;
+    }
+
+    .badge-red {
+      background: #f8d7da;
+      color: #842029;
+    }
+
     blockquote {
-      border-left: 4px solid #9fb3c8;
+      border-left: 5px solid #d99a00;
+      background: #fff7dd;
+      border-radius: 8px;
       margin-left: 0;
-      padding-left: 12px;
-      color: #3e5164;
+      padding: 8px 12px;
+      color: #6a4b00;
     }
     """
 

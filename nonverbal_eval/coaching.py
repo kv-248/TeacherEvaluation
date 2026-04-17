@@ -12,8 +12,8 @@ import cv2
 import numpy as np
 import pandas as pd
 
-from .gemini_api import generate_gemini_json
-from .pipeline import log_event
+from .gemini_api import generate_gemini_json, sanitize_gemini_error_message
+from .pipeline import _render_scorecard, _scorecard_payload, log_event
 from .runtime_config import load_base_thresholds, load_coaching_prompt_config, load_qwen_prompt_config
 from .semantic import SemanticConfig, SemanticSample, _extract_frame_at, _run_qwen
 
@@ -27,7 +27,7 @@ _COACHING_CONFIG = load_coaching_prompt_config()
 class CoachingConfig:
     enabled: bool = False
     coach_model: str = str(_COACHING_CONFIG["coaching_synthesis"]["model"])
-    coach_max_windows: int = 6
+    coach_max_windows: int = 8
     coach_top_actions: int = 3
     coach_render_pdf: bool = True
     coach_fallback_template_only: bool = False
@@ -49,7 +49,7 @@ class CoachingArtifacts:
 COACHING_PROMPT = str(_COACHING_CONFIG["coaching_synthesis"]["prompt"])
 ACTION_TEMPLATES: dict[str, dict[str, str]] = _COACHING_CONFIG["action_templates"]
 STRENGTH_TEMPLATES: dict[str, dict[str, str]] = _COACHING_CONFIG["strength_templates"]
-REPORT_SHAPE_VERSION = "feedback_first_v1"
+REPORT_SHAPE_VERSION = "feedback_first_v2"
 
 COACHING_REPORT_SCHEMA = {
     "type": "object",
@@ -71,6 +71,7 @@ COACHING_REPORT_SCHEMA = {
     "properties": {
         "report_shape_version": {"type": "string", "const": REPORT_SHAPE_VERSION},
         "executive_summary": {"type": "string"},
+        "scorecard": {"type": "object"},
         "no_material_intervention_needed": {"type": "boolean"},
         "no_material_intervention_needed_reason": {"type": "string"},
         "top_strengths": {"type": "array"},
@@ -91,6 +92,7 @@ COACHING_GEMINI_SYSTEM_INSTRUCTION = (
 )
 COACHING_TOP_LEVEL_ALIASES: dict[str, tuple[str, ...]] = {
     "executive_summary": ("summary", "coach_summary", "overview"),
+    "scorecard": ("summary_scorecard", "overview_scorecard"),
     "no_material_intervention_needed": ("no_intervention_needed", "no_action_needed"),
     "no_material_intervention_needed_reason": ("reason", "rationale", "why"),
     "top_strengths": ("strengths", "strength_highlights", "top_highlights"),
@@ -116,6 +118,7 @@ COACHING_ITEM_FIELD_ALIASES: dict[str, tuple[str, ...]] = {
     "what_to_monitor_next": ("what_to_watch", "monitor_next", "what_to_try_next"),
     "observed_behavior": ("what_we_saw", "behavior"),
     "metric_evidence": ("metrics", "metric_support"),
+    "semantic_interpretation": ("qwen_interpretation", "semantic_interpretation", "qwen_summary", "interpretation"),
     "qwen_interpretation": ("semantic_interpretation", "qwen_summary", "interpretation"),
     "coaching_implication": ("implication", "next_step", "suggested_response"),
     "confidence": ("evidence_confidence", "confidence_level"),
@@ -166,6 +169,28 @@ def _unique_strings(values: list[str]) -> list[str]:
             seen.add(value)
             out.append(value)
     return out
+
+
+def _safe_float(value: Any, default: float = 0.0) -> float:
+    try:
+        out = float(value)
+    except (TypeError, ValueError):
+        return default
+    if math.isnan(out) or math.isinf(out):
+        return default
+    return out
+
+
+def _title_key(value: Any) -> str:
+    text = re.sub(r"[^a-z0-9]+", " ", str(value or "").lower())
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def _linear_score(value: Any, lower: float, upper: float) -> float:
+    score = _safe_float(value)
+    if upper <= lower:
+        return 0.0
+    return max(0.0, min((score - lower) / (upper - lower), 1.0))
 
 
 def _metric_band(score: float) -> str:
@@ -259,6 +284,22 @@ def _reliability_notes(summary: dict[str, Any]) -> dict[str, Any]:
         if qc_score >= int(cfg["high_score_min"])
         else "medium" if qc_score >= int(cfg["medium_score_min"]) else "low"
     )
+    if (
+        qc["face_coverage"] < float(cfg["hard_low_face_max"])
+        or (
+            qc["face_coverage"] < float(cfg["hard_low_combo_face_max"])
+            and qc["hand_coverage"] < float(cfg["hard_low_combo_hand_max"])
+        )
+    ):
+        label = "low"
+        cap_note = "Reliability is capped at low because face and hand visibility are too limited for confident coaching claims."
+        if cap_note not in notes:
+            notes.append(cap_note)
+    elif label == "high" and (
+        qc["face_coverage"] < float(cfg["cap_high_face_max"])
+        or qc["hand_coverage"] < float(cfg["cap_high_hand_max"])
+    ):
+        label = "medium"
     return {
         "label": label,
         "summary": f"Reliability is {label} for this segment based on face, hand, and pose coverage plus clip length.",
@@ -338,6 +379,116 @@ def _window_priority_candidates(window_df: pd.DataFrame) -> list[dict[str, Any]]
     return unique
 
 
+def _over_animation_signal_score(row: dict[str, Any]) -> float:
+    cfg = _BASE_THRESHOLDS["coaching"]["window_tags"]
+    hand_coverage = _safe_float(row.get("hand_coverage"))
+    if hand_coverage < float(cfg["over_animation_hand_coverage_min"]):
+        return 0.0
+    return 100.0 * (
+        0.30 * _linear_score(
+            row.get("excessive_animation_risk"),
+            float(cfg["excessive_animation_risk_min"]),
+            float(cfg["excessive_animation_risk_high_min"]),
+        )
+        + 0.30 * _linear_score(
+            row.get("gesture_motion_peak"),
+            float(cfg["over_animation_peak_min"]),
+            float(cfg["over_animation_peak_high_min"]),
+        )
+        + 0.20 * _linear_score(
+            row.get("gesture_motion_std"),
+            float(cfg["over_animation_std_min"]),
+            float(cfg["over_animation_std_high_min"]),
+        )
+        + 0.20 * _linear_score(
+            row.get("gesture_extent_mean"),
+            float(cfg["over_animation_extent_min"]),
+            float(cfg["over_animation_extent_high_min"]),
+        )
+    )
+
+
+def _should_flag_over_animation(row: dict[str, Any]) -> bool:
+    cfg = _BASE_THRESHOLDS["coaching"]["window_tags"]
+    if _safe_float(row.get("hand_coverage")) < float(cfg["over_animation_hand_coverage_min"]):
+        return False
+    if _safe_float(row.get("excessive_animation_risk")) < float(cfg["excessive_animation_risk_min"]):
+        return False
+    return any(
+        (
+            _safe_float(row.get("gesture_motion_peak")) >= float(cfg["over_animation_peak_min"]),
+            _safe_float(row.get("gesture_motion_std")) >= float(cfg["over_animation_std_min"]),
+            _safe_float(row.get("gesture_extent_mean")) >= float(cfg["over_animation_extent_min"]),
+        )
+    )
+
+
+def _window_value(row: dict[str, Any], key: str, default: Any = None) -> Any:
+    if key in row and row.get(key) is not None:
+        return row.get(key)
+    metrics = row.get("metrics")
+    if isinstance(metrics, dict) and key in metrics and metrics.get(key) is not None:
+        return metrics.get(key)
+    quality_control = row.get("quality_control")
+    if isinstance(quality_control, dict) and key in quality_control and quality_control.get(key) is not None:
+        return quality_control.get(key)
+    qwen = row.get("qwen")
+    if isinstance(qwen, dict):
+        aggregate = qwen.get("aggregate")
+        if isinstance(aggregate, dict) and key in aggregate and aggregate.get(key) is not None:
+            return aggregate.get(key)
+    return default
+
+
+def _is_board_context(row: dict[str, Any], qwen_window: dict[str, Any] | None = None) -> bool:
+    cfg = _BASE_THRESHOLDS["coaching"]["window_tags"]
+    audience_orientation = _safe_float(_window_value(row, "audience_orientation_score"), default=100.0)
+    face_coverage = _safe_float(_window_value(row, "face_coverage"), default=1.0)
+    row_signal = (
+        audience_orientation < float(cfg["board_context_audience_orientation_max"])
+        and face_coverage < float(cfg["board_context_face_coverage_max"])
+    )
+
+    aggregate: dict[str, Any] = {}
+    if isinstance(qwen_window, dict):
+        aggregate = qwen_window.get("aggregate", qwen_window)
+    elif isinstance(row.get("qwen"), dict):
+        aggregate = row["qwen"].get("aggregate", {})
+
+    semantic_signal = (
+        _safe_float(aggregate.get("board_focus_ratio")) >= float(cfg["board_context_board_focus_min"])
+        or _safe_float(aggregate.get("writing_ratio")) >= float(cfg["board_context_writing_ratio_min"])
+    )
+    return bool(row_signal or (semantic_signal and audience_orientation < float(cfg["board_context_audience_orientation_max"])))
+
+
+def _filter_board_context_tags(tags: list[str], kind: str, board_context: bool) -> list[str]:
+    if not board_context:
+        return _unique_strings(tags)
+    suppressed_by_kind = {
+        "action": {
+            "uneven_room_scan",
+            "low_audience_orientation",
+            "over_animated_delivery",
+            "tense_or_neutral_affect",
+            "reduced_alertness",
+            "low_gaze_sweep",
+            "flat_facial_expressiveness",
+        },
+        "strength": {
+            "distributed_room_engagement",
+            "controlled_expressive_gestures",
+            "welcoming_affect",
+            "alert_room_presence",
+            "balanced_gaze_sweep",
+            "expressive_range",
+            "open_palm_explaining",
+        },
+    }
+    suppressed = suppressed_by_kind.get(kind, set())
+    return _unique_strings([tag for tag in tags if tag not in suppressed])
+
+
 def _window_base_tags(row: dict[str, Any], kind: str) -> list[str]:
     tags: list[str] = []
     cfg = _BASE_THRESHOLDS["coaching"]["window_tags"]
@@ -358,7 +509,7 @@ def _window_base_tags(row: dict[str, Any], kind: str) -> list[str]:
             and row["static_behavior_risk"] >= float(cfg["static_behavior_risk_min"])
         ):
             tags.append("limited_movement")
-        if row["excessive_animation_risk"] >= float(cfg["excessive_animation_risk_min"]):
+        if _should_flag_over_animation(row):
             tags.append("over_animated_delivery")
         if (
             row["face_coverage"] >= float(cfg["affect_face_coverage_min"])
@@ -367,6 +518,12 @@ def _window_base_tags(row: dict[str, Any], kind: str) -> list[str]:
             tags.append("tense_or_neutral_affect")
         if row["alertness_score"] < float(cfg["alertness_low_max"]):
             tags.append("reduced_alertness")
+        if float(row.get("static_zone_time_pct", 0.0)) >= float(cfg["stage_anchor_static_min"]):
+            tags.append("static_stage_anchor")
+        if float(row.get("sweep_rate_per_min", 0.0)) < float(cfg["sweep_rate_low_max"]):
+            tags.append("low_gaze_sweep")
+        if bool(row.get("facial_flatness_flag", 0)):
+            tags.append("flat_facial_expressiveness")
 
     if kind == "strength":
         if row["eye_contact_distribution_score"] >= float(cfg["strength_eye_distribution_min"]):
@@ -385,7 +542,15 @@ def _window_base_tags(row: dict[str, Any], kind: str) -> list[str]:
             tags.append("welcoming_affect")
         if row["alertness_score"] >= float(cfg["strength_alertness_min"]):
             tags.append("alert_room_presence")
-    return _unique_strings(tags)
+        if float(row.get("coverage_area_pct", 0.0)) >= float(cfg["strength_stage_coverage_min"]):
+            tags.append("room_mobility_range")
+        if float(row.get("sweep_rate_per_min", 0.0)) >= float(cfg["strength_sweep_rate_min"]):
+            tags.append("balanced_gaze_sweep")
+        if float(row.get("dramatic_pause_count", 0.0)) > 0 and float(row.get("static_stretch_count", 0.0)) <= 0:
+            tags.append("purposeful_pause_control")
+        if not bool(row.get("facial_flatness_flag", 0)) and float(row.get("smile_rolling_std_mean", 0.0)) > 0.014:
+            tags.append("expressive_range")
+    return _filter_board_context_tags(tags, kind, bool(row.get("board_context")))
 
 
 def _primary_tag(tags: list[str], kind: str) -> str:
@@ -396,6 +561,10 @@ def _primary_tag(tags: list[str], kind: str) -> str:
             "controlled_expressive_gestures",
             "welcoming_affect",
             "alert_room_presence",
+            "room_mobility_range",
+            "balanced_gaze_sweep",
+            "purposeful_pause_control",
+            "expressive_range",
             "open_palm_explaining",
         ):
             if preferred in tags:
@@ -409,6 +578,9 @@ def _primary_tag(tags: list[str], kind: str) -> str:
         "over_animated_delivery",
         "tense_or_neutral_affect",
         "reduced_alertness",
+        "static_stage_anchor",
+        "low_gaze_sweep",
+        "flat_facial_expressiveness",
         "low_face_visibility",
     ):
         if preferred in tags:
@@ -444,11 +616,23 @@ def _window_sample_timestamps(window: dict[str, Any], frame_metrics_df: pd.DataF
         elif primary_tag in {"tense_or_neutral_affect"}:
             idx = segment["smile_proxy"].idxmin()
             timestamps.append(float(segment.loc[idx, "timestamp_sec"]))
+        elif primary_tag in {"flat_facial_expressiveness"}:
+            idx = segment["smile_rolling_std"].idxmin()
+            timestamps.append(float(segment.loc[idx, "timestamp_sec"]))
+        elif primary_tag in {"static_stage_anchor"}:
+            idx = segment["gesture_motion"].idxmin()
+            timestamps.append(float(segment.loc[idx, "timestamp_sec"]))
+        elif primary_tag in {"low_gaze_sweep"}:
+            idx = segment["signed_yaw_proxy"].idxmin()
+            timestamps.append(float(segment.loc[idx, "timestamp_sec"]))
         elif primary_tag in {"distributed_room_engagement"}:
             idx = segment["audience_orientation_score_frame"].idxmax()
             timestamps.append(float(segment.loc[idx, "timestamp_sec"]))
         elif primary_tag in {"controlled_expressive_gestures"}:
             idx = segment["gesture_motion"].idxmax()
+            timestamps.append(float(segment.loc[idx, "timestamp_sec"]))
+        elif primary_tag in {"room_mobility_range"}:
+            idx = segment["floor_x"].idxmax()
             timestamps.append(float(segment.loc[idx, "timestamp_sec"]))
     except Exception:
         pass
@@ -518,6 +702,7 @@ def _build_review_windows(
 
     for index, item in enumerate(chosen[: max(config.coach_max_windows, 1)]):
         row = dict(item["row"])
+        row["board_context"] = _is_board_context(row)
         tags = _window_base_tags(row, item["kind"])
         primary_tag = _primary_tag(tags, item["kind"])
         absolute_label = _window_label(float(row["window_start_sec"]), float(row["window_end_sec"]))
@@ -533,7 +718,7 @@ def _build_review_windows(
         metric_lines = [
             f"overall={row['heuristic_nonverbal_score']:.1f}  eye={row['eye_contact_distribution_score']:.1f}",
             f"presence={row['confidence_presence_score']:.1f}  natural={row['natural_movement_score']:.1f}",
-            f"excessive={row['excessive_animation_risk']:.1f}  face={row['face_coverage']:.2f}",
+            f"stage_static={row.get('static_zone_time_pct', 0.0):.1f}  sweep/min={row.get('sweep_rate_per_min', 0.0):.1f}",
         ]
         title = "Strength to preserve" if item["kind"] == "strength" else "Review moment"
         display_path = artifacts.moments_dir / f"moment_{index + 1:02d}_{absolute_label.replace(':', '').replace('-', '_')}.jpg"
@@ -547,6 +732,7 @@ def _build_review_windows(
             "priority": float(item["priority"]),
             "primary_tag": primary_tag,
             "evidence_tags": tags,
+            "board_context": bool(row["board_context"]),
             "window_local_start_sec": float(row["window_local_start_sec"]),
             "window_local_end_sec": float(row["window_local_end_sec"]),
             "window_start_sec": float(row["window_start_sec"]),
@@ -558,11 +744,27 @@ def _build_review_windows(
                 "positive_affect_score": float(row["positive_affect_score"]),
                 "confidence_presence_score": float(row["confidence_presence_score"]),
                 "eye_contact_distribution_score": float(row["eye_contact_distribution_score"]),
+                "audience_orientation_score": float(row["audience_orientation_score"]),
                 "alertness_score": float(row["alertness_score"]),
                 "static_behavior_risk": float(row["static_behavior_risk"]),
                 "excessive_animation_risk": float(row["excessive_animation_risk"]),
+                "gesture_motion_peak": _safe_float(row.get("gesture_motion_peak")),
+                "gesture_motion_std": _safe_float(row.get("gesture_motion_std")),
+                "gesture_extent_mean": _safe_float(row.get("gesture_extent_mean")),
                 "closed_posture_risk": float(row["closed_posture_risk"]),
                 "tension_hostility_risk": float(row["tension_hostility_risk"]),
+                "static_zone_time_pct": float(row.get("static_zone_time_pct", 0.0)),
+                "coverage_area_pct": float(row.get("coverage_area_pct", 0.0)),
+                "pause_count": float(row.get("pause_count", 0.0)),
+                "dramatic_pause_count": float(row.get("dramatic_pause_count", 0.0)),
+                "static_stretch_count": float(row.get("static_stretch_count", 0.0)),
+                "facial_flatness_flag": bool(row.get("facial_flatness_flag", 0)),
+                "smile_rolling_std_mean": float(row.get("smile_rolling_std_mean", 0.0)),
+                "brow_rolling_std_mean": float(row.get("brow_rolling_std_mean", 0.0)),
+                "mouth_rolling_std_mean": float(row.get("mouth_rolling_std_mean", 0.0)),
+                "sweep_rate_per_min": float(row.get("sweep_rate_per_min", 0.0)),
+                "sector_distribution_entropy": float(row.get("sector_distribution_entropy", 0.0)),
+                "longest_fixation_sec": float(row.get("longest_fixation_sec", 0.0)),
             },
             "quality_control": {
                 "pose_coverage": float(row["pose_coverage"]),
@@ -587,6 +789,11 @@ def _build_review_windows(
                     image_path=image_path,
                     frame_bgr=frame_bgr,
                     frame_shape=frame_bgr.shape,
+                    context={
+                        "floor_x": round(float(segment_df["floor_x"].dropna().mean()), 3) if "floor_x" in segment_df and segment_df["floor_x"].dropna().size else None,
+                        "floor_y": round(float(segment_df["floor_y"].dropna().mean()), 3) if "floor_y" in segment_df and segment_df["floor_y"].dropna().size else None,
+                        "pause_state": str(segment_df.get("pause_state", pd.Series(dtype=object)).mode().iloc[0]) if "pause_state" in segment_df and not segment_df["pause_state"].dropna().empty else "moving",
+                    },
                 )
             )
 
@@ -642,6 +849,7 @@ def _summarize_qwen_window(qwen_annotations: list[dict[str, Any]]) -> dict[str, 
         "notes_focus_ratio": ratio(focus_counts, "notes"),
         "open_palm_explaining_ratio": ratio(action_counts, "open_palm_explaining"),
         "reading_from_notes_ratio": ratio(action_counts, "reading_from_notes"),
+        "writing_ratio": ratio(action_counts, "writing_board"),
         "static_stance_ratio": ratio(action_counts, "static_stance"),
         "warm_affect_ratio": ratio(affect_counts, "warm"),
         "tense_affect_ratio": ratio(affect_counts, "tense"),
@@ -681,7 +889,7 @@ def _augment_tags_with_qwen(tags: list[str], qwen_window: dict[str, Any]) -> lis
 def _merge_qwen_into_window_tags(window: dict[str, Any], qwen_window: dict[str, Any]) -> list[str]:
     tags = list(window.get("evidence_tags", []))
     if qwen_window.get("status") != "completed":
-        return _unique_strings(tags)
+        return _filter_board_context_tags(tags, str(window.get("kind", "action")), bool(window.get("board_context")))
 
     aggregate = qwen_window.get("aggregate", {})
     metrics = window.get("metrics", {})
@@ -710,23 +918,31 @@ def _merge_qwen_into_window_tags(window: dict[str, Any], qwen_window: dict[str, 
     ):
         tags.append("closed_posture")
 
-    return _unique_strings(tags)
+    return _filter_board_context_tags(tags, str(window.get("kind", "action")), bool(window.get("board_context")))
 
 
 def _report_shape_thresholds() -> dict[str, Any]:
     return _BASE_THRESHOLDS["coaching"]["report_shape"]
 
 
-def _window_observation_rows(window_df: pd.DataFrame) -> list[dict[str, Any]]:
+def _window_observation_rows(
+    window_df: pd.DataFrame,
+    board_context_lookup: dict[str, bool] | None = None,
+) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for row in window_df.to_dict(orient="records"):
         pose_coverage = float(row["pose_coverage"])
         face_coverage = float(row["face_coverage"])
         hand_coverage = float(row["hand_coverage"])
+        window_label = _window_label(float(row["window_start_sec"]), float(row["window_end_sec"]))
+        board_context = _is_board_context(row)
+        if board_context_lookup is not None:
+            board_context = bool(board_context_lookup.get(window_label, board_context))
         rows.append(
             {
                 **row,
-                "window_label": _window_label(float(row["window_start_sec"]), float(row["window_end_sec"])),
+                "window_label": window_label,
+                "board_context": board_context,
                 "quality_control": {
                     "pose_coverage": pose_coverage,
                     "face_coverage": face_coverage,
@@ -759,11 +975,17 @@ def _action_signal_score(tag: str, row: dict[str, Any]) -> float:
     if tag == "limited_movement":
         return max(100.0 - float(row["natural_movement_score"]), float(row["static_behavior_risk"]))
     if tag == "over_animated_delivery":
-        return float(row["excessive_animation_risk"])
+        return _over_animation_signal_score(row)
     if tag == "tense_or_neutral_affect":
         return max(100.0 - float(row["positive_affect_score"]), float(row["tension_hostility_risk"]))
     if tag == "reduced_alertness":
         return max(0.0, 100.0 - float(row["alertness_score"]))
+    if tag == "static_stage_anchor":
+        return float(row.get("static_zone_time_pct", 0.0))
+    if tag == "low_gaze_sweep":
+        return max(0.0, 100.0 - min(float(row.get("sweep_rate_per_min", 0.0)) * 20.0, 100.0))
+    if tag == "flat_facial_expressiveness":
+        return 75.0 if bool(row.get("facial_flatness_flag", 0)) else 0.0
     return 0.0
 
 
@@ -778,6 +1000,14 @@ def _strength_signal_score(tag: str, row: dict[str, Any]) -> float:
         return float(row["positive_affect_score"])
     if tag == "alert_room_presence":
         return float(row["alertness_score"])
+    if tag == "room_mobility_range":
+        return float(row.get("coverage_area_pct", 0.0))
+    if tag == "balanced_gaze_sweep":
+        return min(float(row.get("sweep_rate_per_min", 0.0)) * 20.0, 100.0)
+    if tag == "purposeful_pause_control":
+        return 70.0 if float(row.get("dramatic_pause_count", 0.0)) > 0 and float(row.get("static_stretch_count", 0.0)) <= 0 else 0.0
+    if tag == "expressive_range":
+        return min(float(row.get("smile_rolling_std_mean", 0.0)) * 3000.0, 100.0)
     return 0.0
 
 
@@ -799,6 +1029,12 @@ def _action_evidence_summary(tag: str, row: dict[str, Any]) -> str:
         return f"{label} showed a flatter or tighter visible facial tone than the rest of the clip."
     if tag == "reduced_alertness":
         return f"{label} showed fewer quick room checks and a less visibly alert scan."
+    if tag == "static_stage_anchor":
+        return f"{label} stayed anchored to one room zone for most of the window."
+    if tag == "low_gaze_sweep":
+        return f"{label} showed long visual dwell in one sector instead of a deliberate room sweep."
+    if tag == "flat_facial_expressiveness":
+        return f"{label} showed less facial variation than the rest of the clip."
     return f"{label} showed {tag.replace('_', ' ')}."
 
 
@@ -816,6 +1052,14 @@ def _strength_evidence_summary(tag: str, row: dict[str, Any]) -> str:
         return f"{label} kept the head and eyes visibly engaged with the room."
     if tag == "open_palm_explaining":
         return f"{label} included open-palm explanatory gestures that supported the explanation."
+    if tag == "room_mobility_range":
+        return f"{label} moved across more than one room zone without losing visible control."
+    if tag == "balanced_gaze_sweep":
+        return f"{label} used a room sweep that reached more than one sector over time."
+    if tag == "purposeful_pause_control":
+        return f"{label} used short settled pauses without drifting into static stretches."
+    if tag == "expressive_range":
+        return f"{label} showed visible facial variation that helped emphasis land."
     return f"{label} showed {tag.replace('_', ' ')}."
 
 
@@ -855,17 +1099,25 @@ def _tag_modality(tag: str) -> str:
         "low_audience_orientation",
         "warm_affect",
         "upright_confident_presence",
+        "low_gaze_sweep",
+        "flat_facial_expressiveness",
+        "balanced_gaze_sweep",
+        "expressive_range",
     }
     hand_tags = {
         "limited_movement",
         "over_animated_delivery",
         "open_palm_explaining",
         "controlled_expressive_gestures",
+        "purposeful_pause_control",
     }
+    pose_tags = {"static_stage_anchor", "room_mobility_range", "closed_posture"}
     if tag in face_tags:
         return "face"
     if tag in hand_tags:
         return "hand"
+    if tag in pose_tags:
+        return "pose"
     return "pose"
 
 
@@ -924,6 +1176,7 @@ def _draft_action_candidates(
 ) -> list[dict[str, Any]]:
     grouped: dict[str, dict[str, Any]] = {}
     watch_threshold = float(_report_shape_thresholds()["watchlist_severity_min"])
+    board_context_lookup = {str(window["window_label"]): bool(window.get("board_context")) for window in review_windows}
 
     def add_signal(
         *,
@@ -950,7 +1203,7 @@ def _draft_action_candidates(
         bucket["evidence_parts"].append(evidence_text)
         bucket["severities"].append(float(severity))
 
-    for row in _window_observation_rows(window_df):
+    for row in _window_observation_rows(window_df, board_context_lookup=board_context_lookup):
         for tag in _window_base_tags(row, "action"):
             if tag not in ACTION_TEMPLATES:
                 continue
@@ -1029,6 +1282,7 @@ def _draft_action_candidates(
 def _draft_strength_candidates(window_df: pd.DataFrame, review_windows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     grouped: dict[str, dict[str, Any]] = {}
     min_priority = float(_report_shape_thresholds()["strength_inventory_min_priority"])
+    board_context_lookup = {str(window["window_label"]): bool(window.get("board_context")) for window in review_windows}
 
     def add_signal(
         *,
@@ -1055,7 +1309,7 @@ def _draft_strength_candidates(window_df: pd.DataFrame, review_windows: list[dic
         bucket["evidence_parts"].append(evidence_text)
         bucket["priorities"].append(float(priority))
 
-    for row in _window_observation_rows(window_df):
+    for row in _window_observation_rows(window_df, board_context_lookup=board_context_lookup):
         for tag in _window_base_tags(row, "strength"):
             if tag not in STRENGTH_TEMPLATES:
                 continue
@@ -1069,6 +1323,8 @@ def _draft_strength_candidates(window_df: pd.DataFrame, review_windows: list[dic
 
     for window in review_windows:
         if "open_palm_explaining" not in window.get("evidence_tags", []):
+            continue
+        if bool(window.get("board_context")):
             continue
         add_signal(
             tag="open_palm_explaining",
@@ -1099,15 +1355,37 @@ def _draft_strength_candidates(window_df: pd.DataFrame, review_windows: list[dic
     return strengths
 
 
+def _moment_metric_evidence(window: dict[str, Any]) -> str:
+    metrics = window["metrics"]
+    parts = [
+        f"Overall {metrics['overall_score']:.1f}",
+        f"room scan {metrics['eye_contact_distribution_score']:.1f}",
+        f"presence {metrics['confidence_presence_score']:.1f}",
+        f"natural movement {metrics['natural_movement_score']:.1f}",
+    ]
+    primary_tag = str(window.get("primary_tag", ""))
+    if primary_tag in {"over_animated_delivery", "controlled_expressive_gestures"}:
+        parts.append(f"gesture peak {metrics.get('gesture_motion_peak', 0.0):.1f}")
+        parts.append(f"gesture extent {metrics.get('gesture_extent_mean', 0.0):.2f}")
+    elif primary_tag in {"static_stage_anchor", "room_mobility_range"}:
+        parts.append(f"stage static {metrics.get('static_zone_time_pct', 0.0):.0f}%")
+        parts.append(f"room coverage {metrics.get('coverage_area_pct', 0.0):.0f}%")
+    elif primary_tag in {"low_gaze_sweep", "balanced_gaze_sweep", "distributed_room_engagement"}:
+        parts.append(f"sweep {metrics.get('sweep_rate_per_min', 0.0):.1f}/min")
+        parts.append(f"longest fixation {metrics.get('longest_fixation_sec', 0.0):.1f}s")
+    elif primary_tag in {"flat_facial_expressiveness", "expressive_range", "welcoming_affect"}:
+        parts.append(f"smile variability {metrics.get('smile_rolling_std_mean', 0.0):.3f}")
+        parts.append(f"brow variability {metrics.get('brow_rolling_std_mean', 0.0):.3f}")
+    elif primary_tag in {"limited_movement", "purposeful_pause_control"}:
+        parts.append(f"dramatic pauses {metrics.get('dramatic_pause_count', 0.0):.0f}")
+        parts.append(f"static stretches {metrics.get('static_stretch_count', 0.0):.0f}")
+    return "; ".join(parts) + "."
+
+
 def _moment_cards(review_windows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     cards: list[dict[str, Any]] = []
     for window in review_windows[:6]:
-        metric_evidence = (
-            f"Overall {window['metrics']['overall_score']:.1f}; "
-            f"room scan {window['metrics']['eye_contact_distribution_score']:.1f}; "
-            f"presence {window['metrics']['confidence_presence_score']:.1f}; "
-            f"natural movement {window['metrics']['natural_movement_score']:.1f}."
-        )
+        metric_evidence = _moment_metric_evidence(window)
         if window["kind"] == "strength":
             implication = _strength_repeat_hint(window["primary_tag"])
         else:
@@ -1188,6 +1466,14 @@ def _build_evidence_payload(
     config: CoachingConfig,
 ) -> dict[str, Any]:
     reliability = _reliability_notes(summary)
+    quality_warnings = list(reliability["notes"])
+    board_context_windows = sum(1 for window in review_windows if bool(window.get("board_context")))
+    if review_windows:
+        board_context_ratio = board_context_windows / max(len(review_windows), 1)
+        if board_context_ratio >= float(_BASE_THRESHOLDS["coaching"]["window_tags"]["board_context_note_window_ratio_min"]):
+            quality_warnings.append(
+                "Several review windows were board-facing or writing-oriented, so audience-facing cues were down-weighted in those parts."
+            )
     action_candidates = _draft_action_candidates(
         window_df=window_df,
         review_windows=review_windows,
@@ -1241,31 +1527,6 @@ def _build_evidence_payload(
                 "confidence": item["confidence"],
             }
         )
-    top_strength_tags = {item["tag"] for item in top_strengths}
-    for item in strength_inventory:
-        if item["tag"] in top_strength_tags:
-            continue
-        additional_observation_inventory.append(
-            {
-                "kind": "strength_to_preserve",
-                "title": item["title"],
-                "evidence": item["evidence"],
-                "suggested_response": item["what_to_repeat"],
-                "timestamps": item["timestamps"],
-                "confidence": item["confidence"],
-            }
-        )
-    for item in low_confidence_watchlist:
-        additional_observation_inventory.append(
-            {
-                "kind": "watch_item",
-                "title": item["title"],
-                "evidence": item["what_we_saw"],
-                "suggested_response": item["what_to_monitor_next"],
-                "timestamps": item["timestamps"],
-                "confidence": item["confidence"],
-            }
-        )
     additional_observation_inventory = additional_observation_inventory[: int(cfg["additional_observation_limit"])]
     priority_signals = [
         {
@@ -1309,7 +1570,9 @@ def _build_evidence_payload(
                 "score": float(worst["heuristic_nonverbal_score"]),
             },
             "reliability": reliability["label"],
+            "board_context_review_window_count": board_context_windows,
         },
+        "scorecard": _scorecard_payload(summary),
         "score_snapshot": {
             "overall_score": summary["scores"]["heuristic_nonverbal_score"],
             "natural_movement_score": summary["scores"]["natural_movement_score"],
@@ -1317,9 +1580,15 @@ def _build_evidence_payload(
             "confidence_presence_score": summary["scores"]["confidence_presence_score"],
             "eye_contact_distribution_score": summary["scores"]["eye_contact_distribution_score"],
             "alertness_score": summary["scores"]["alertness_score"],
+            "stage_usage_score": summary["scores"]["stage_usage_score"],
             "static_behavior_risk": summary["category_feedback"]["gesture_and_facial_expression"]["static_behavior_risk"],
             "excessive_animation_risk": summary["category_feedback"]["gesture_and_facial_expression"]["excessive_animation_risk"],
             "closed_posture_risk": summary["category_feedback"]["posture_and_presence"]["closed_posture_risk"],
+        },
+        "summary_extensions": {
+            "movement_presence": summary.get("movement_presence", {}),
+            "facial_expressiveness": summary.get("facial_expressiveness", {}),
+            "gaze_dynamics": summary.get("gaze_dynamics", {}),
         },
         "priority_signals": priority_signals,
         "strength_signals": strength_signals,
@@ -1328,7 +1597,7 @@ def _build_evidence_payload(
             "global_summary": semantic_payload["summary"] if semantic_payload else None,
             "window_count": sum(1 for window in review_windows if window["qwen"]["status"] == "completed"),
         },
-        "quality_warnings": reliability["notes"],
+        "quality_warnings": _unique_strings(quality_warnings),
         "recommended_focus_areas": [item["tag"] for item in priority_actions]
         or [item["tag"] for item in top_strengths[:2]]
         or [item["title"] for item in low_confidence_watchlist[:2]],
@@ -1476,6 +1745,82 @@ def _coerce_list_of_dicts(
     return out
 
 
+def _dedupe_report_items(
+    items: list[dict[str, Any]],
+    *,
+    limit: int,
+    blocked_title_keys: set[str] | None = None,
+    drop_kinds: set[str] | None = None,
+) -> list[dict[str, Any]]:
+    blocked = set(blocked_title_keys or set())
+    disallowed_kinds = set(drop_kinds or set())
+    seen: set[str] = set()
+    out: list[dict[str, Any]] = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        if disallowed_kinds and _coerce_kind_label(item.get("kind")) in disallowed_kinds:
+            continue
+        key = _title_key(item.get("title"))
+        if not key or key in blocked or key in seen:
+            continue
+        seen.add(key)
+        out.append(item)
+        if len(out) >= limit:
+            break
+    return out
+
+
+def _clean_report_lists(report: dict[str, Any]) -> dict[str, Any]:
+    cleaned = dict(report)
+    shape_cfg = _report_shape_thresholds()
+    cleaned["top_strengths"] = _dedupe_report_items(
+        list(cleaned.get("top_strengths", [])),
+        limit=int(shape_cfg["top_strength_limit"]),
+    )
+    strength_keys = {_title_key(item.get("title")) for item in cleaned["top_strengths"]}
+    cleaned["strength_inventory"] = _dedupe_report_items(
+        list(cleaned.get("strength_inventory", [])),
+        limit=int(shape_cfg["strength_inventory_limit"]),
+        blocked_title_keys=strength_keys,
+    )
+    strength_keys |= {_title_key(item.get("title")) for item in cleaned["strength_inventory"]}
+    cleaned["priority_actions"] = _dedupe_report_items(
+        list(cleaned.get("priority_actions", [])),
+        limit=max(int(len(cleaned.get("priority_actions", [])) or 0), 1),
+        blocked_title_keys={key for key in strength_keys if key},
+    )
+    action_keys = {_title_key(item.get("title")) for item in cleaned["priority_actions"]}
+    blocked_watch_keys = {key for key in strength_keys | action_keys if key}
+    cleaned["low_confidence_watchlist"] = _dedupe_report_items(
+        list(cleaned.get("low_confidence_watchlist", [])),
+        limit=int(shape_cfg["watchlist_limit"]),
+        blocked_title_keys=blocked_watch_keys,
+    )
+    watch_keys = {_title_key(item.get("title")) for item in cleaned["low_confidence_watchlist"]}
+    cleaned["additional_observation_inventory"] = _dedupe_report_items(
+        list(cleaned.get("additional_observation_inventory", [])),
+        limit=int(shape_cfg["additional_observation_limit"]),
+        blocked_title_keys=blocked_watch_keys | watch_keys,
+        drop_kinds={"strength_to_preserve"},
+    )
+    if cleaned.get("no_material_intervention_needed"):
+        cleaned["priority_actions"] = []
+
+    seen_moments: set[tuple[str, str]] = set()
+    evidence_moments: list[dict[str, Any]] = []
+    for item in cleaned.get("evidence_moments", []):
+        if not isinstance(item, dict):
+            continue
+        key = (_coerce_text(item.get("timestamp")), _title_key(item.get("headline")))
+        if not key[0] or not key[1] or key in seen_moments:
+            continue
+        seen_moments.add(key)
+        evidence_moments.append(item)
+    cleaned["evidence_moments"] = evidence_moments[:6]
+    return cleaned
+
+
 def _payload_value(payload: dict[str, Any], field: str) -> Any:
     for candidate in (field, *COACHING_TOP_LEVEL_ALIASES.get(field, ())):
         if candidate in payload:
@@ -1509,6 +1854,7 @@ def _build_llm_report(
         },
         "report_shape_version": REPORT_SHAPE_VERSION,
         "executive_summary": _coerce_text(_payload_value(payload, "executive_summary"), ""),
+        "scorecard": _payload_value(payload, "scorecard") if isinstance(_payload_value(payload, "scorecard"), dict) else evidence["scorecard"],
         "no_material_intervention_needed": _coerce_bool(_payload_value(payload, "no_material_intervention_needed")),
         "no_material_intervention_needed_reason": _coerce_text(
             _payload_value(payload, "no_material_intervention_needed_reason"),
@@ -1549,7 +1895,7 @@ def _build_llm_report(
         "confidence_notes": _coerce_list_of_strings(_payload_value(payload, "confidence_notes"), 6),
         "evidence_moments": _coerce_list_of_dicts(
             _payload_value(payload, "evidence_moments"),
-            ["timestamp", "headline", "observed_behavior", "metric_evidence", "qwen_interpretation", "coaching_implication"],
+            ["timestamp", "headline", "observed_behavior", "metric_evidence", "semantic_interpretation", "coaching_implication"],
             6,
             aliases=COACHING_ITEM_FIELD_ALIASES,
         ),
@@ -1577,7 +1923,7 @@ def _build_llm_report(
     report["watch_for"] = _unique_strings(report["watch_for"])
     report["confidence_notes"] = _unique_strings(report["confidence_notes"])
 
-    return report
+    return _clean_report_lists(report)
 
 
 def _validate_llm_report(report: dict[str, Any]) -> bool:
@@ -1605,6 +1951,8 @@ def _merge_llm_report_with_fallback(
         "model": model_name,
     }
     merged["report_shape_version"] = REPORT_SHAPE_VERSION
+    if isinstance(llm_report.get("scorecard"), dict):
+        merged["scorecard"] = llm_report["scorecard"]
 
     if _has_text(llm_report.get("executive_summary")):
         merged["executive_summary"] = llm_report["executive_summary"]
@@ -1636,7 +1984,7 @@ def _merge_llm_report_with_fallback(
         merged["no_material_intervention_needed_reason"] = llm_report["no_material_intervention_needed_reason"]
         merged["priority_actions"] = []
 
-    return merged
+    return _clean_report_lists(merged)
 
 
 def _fallback_report(evidence: dict[str, Any], config: CoachingConfig) -> dict[str, Any]:
@@ -1677,6 +2025,7 @@ def _fallback_report(evidence: dict[str, Any], config: CoachingConfig) -> dict[s
             "model": None,
         },
         "report_shape_version": REPORT_SHAPE_VERSION,
+        "scorecard": evidence["scorecard"],
         "executive_summary": " ".join(executive_parts),
         "no_material_intervention_needed": bool(evidence["no_material_intervention_needed"]),
         "no_material_intervention_needed_reason": evidence["no_material_intervention_needed_reason"],
@@ -1722,13 +2071,13 @@ def _fallback_report(evidence: dict[str, Any], config: CoachingConfig) -> dict[s
                 "headline": card["headline"],
                 "observed_behavior": card["observed_behavior"],
                 "metric_evidence": card["metric_evidence"],
-                "qwen_interpretation": card["qwen_interpretation"],
+                "semantic_interpretation": card["qwen_interpretation"],
                 "coaching_implication": card["coaching_implication"],
             }
             for card in evidence["moment_cards"][:6]
         ],
     }
-    return report
+    return _clean_report_lists(report)
 
 
 def _run_coach_llm(evidence: dict[str, Any], config: CoachingConfig, events_path: Path) -> dict[str, Any] | None:
@@ -1738,6 +2087,8 @@ def _run_coach_llm(evidence: dict[str, Any], config: CoachingConfig, events_path
     prompt_payload = {
         "report_shape_version": REPORT_SHAPE_VERSION,
         "overall_profile": evidence["overall_profile"],
+        "scorecard": evidence["scorecard"],
+        "summary_extensions": evidence["summary_extensions"],
         "no_material_intervention_needed": evidence["no_material_intervention_needed"],
         "no_material_intervention_needed_reason": evidence["no_material_intervention_needed_reason"],
         "priority_signals": evidence["priority_signals"],
@@ -1748,6 +2099,7 @@ def _run_coach_llm(evidence: dict[str, Any], config: CoachingConfig, events_path
                 "kind": row["kind"],
                 "primary_tag": row["primary_tag"],
                 "evidence_tags": row["evidence_tags"],
+                "board_context": bool(row.get("board_context")),
                 "metrics": row["metrics"],
                 "quality_control": row["quality_control"],
                 "qwen": {
@@ -1775,12 +2127,18 @@ def _run_coach_llm(evidence: dict[str, Any], config: CoachingConfig, events_path
             model_name=config.coach_model,
             system_instruction=COACHING_GEMINI_SYSTEM_INSTRUCTION,
             user_text=prompt_json,
-            max_output_tokens=1600,
+            max_output_tokens=4096,
             temperature=0.0,
             response_json_schema=COACHING_REPORT_SCHEMA,
+            request_metadata_recorder=lambda payload: log_event(events_path, "coaching_gemini_request", **payload),
         )
     except Exception as exc:
-        log_event(events_path, "coaching_llm_inference_failed", reason=f"{type(exc).__name__}: {exc}", model=config.coach_model)
+        log_event(
+            events_path,
+            "coaching_llm_inference_failed",
+            reason=sanitize_gemini_error_message(exc),
+            model=config.coach_model,
+        )
         return None
 
     report = _build_llm_report(
@@ -1800,7 +2158,7 @@ def _run_coach_llm(evidence: dict[str, Any], config: CoachingConfig, events_path
         log_event(
             events_path,
             "coaching_llm_partial_output",
-            reason="Schema-valid Gemini output did not satisfy feedback_first_v1 validation; merged onto deterministic fallback.",
+            reason="Schema-valid Gemini output did not satisfy feedback_first_v2 validation; merged onto deterministic fallback.",
             model=config.coach_model,
         )
         return hybrid
@@ -1819,19 +2177,49 @@ def _markdown_table(headers: list[str], rows: list[list[str]]) -> str:
 
 
 def _render_markdown(report: dict[str, Any], evidence: dict[str, Any], artifacts: CoachingArtifacts) -> str:
-    lines = [
-        "# Teacher Coaching Brief",
-        "",
-        "## At a Glance",
-        "",
-        report["executive_summary"],
-        "",
-        f"Reliability: {evidence['overall_profile']['reliability']}.",
-        "",
-        "## Top 3 Actions for the Next Lecture",
-        "",
-    ]
+    def _moment_semantic_text(item: dict[str, Any]) -> str:
+        return str(item.get("semantic_interpretation") or item.get("qwen_interpretation") or "Semantic review unavailable.").strip()
 
+    lines = ["# Teacher Coaching Brief", ""]
+    if str(report.get("source", {}).get("mode", "")).startswith("template_fallback"):
+        lines.extend(["> LLM unavailable - showing template fallback.", ""])
+    scorecard_summary = {
+        "scores": {
+            "heuristic_nonverbal_score": float(evidence["score_snapshot"]["overall_score"]),
+            "posture_stability_score": float(evidence["score_snapshot"]["confidence_presence_score"]),
+            "eye_contact_distribution_score": float(evidence["score_snapshot"]["eye_contact_distribution_score"]),
+            "gesture_smoothness_score": float(evidence["score_snapshot"]["natural_movement_score"]),
+            "positive_affect_score": float(evidence["score_snapshot"]["positive_affect_score"]),
+            "stage_usage_score": float(evidence["score_snapshot"]["stage_usage_score"]),
+        },
+        "interpretation": {
+            "overall_nonverbal_signal": _metric_band(float(evidence["score_snapshot"]["overall_score"])),
+        },
+    }
+    lines.extend(
+        [
+            "## Scorecard",
+            "",
+            _render_scorecard(report, scorecard_summary, show_overall_score=False),
+            "",
+            "## At a Glance",
+            "",
+            report["executive_summary"],
+            "",
+            f"Reliability: {evidence['overall_profile']['reliability']}.",
+            "",
+        ]
+    )
+    if report.get("confidence_notes"):
+        lines.extend(["## Reliability Notes", ""])
+        for note in report["confidence_notes"]:
+            lines.append(f"- {note}")
+        lines.append("")
+
+    top_actions = report.get("priority_actions", [])
+    shown_action_count = len(top_actions[:3])
+    action_heading = "Top Action" if shown_action_count == 1 else (f"Top {shown_action_count} Actions" if shown_action_count else "Top Actions")
+    lines.extend([f"## {action_heading}", ""])
     if report.get("no_material_intervention_needed"):
         lines.extend(
             [
@@ -1840,8 +2228,8 @@ def _render_markdown(report: dict[str, Any], evidence: dict[str, Any], artifacts
                 "",
             ]
         )
-    else:
-        for index, action in enumerate(report["priority_actions"][:3], start=1):
+    elif top_actions:
+        for index, action in enumerate(top_actions[:3], start=1):
             timestamps = action.get("timestamps", [])
             if isinstance(timestamps, str):
                 timestamps = [timestamps]
@@ -1857,61 +2245,21 @@ def _render_markdown(report: dict[str, Any], evidence: dict[str, Any], artifacts
                     "",
                 ]
             )
-        if not report["priority_actions"]:
-            lines.append("- No priority actions were generated for this run.")
+    else:
+        lines.append("- No priority actions were generated for this run.")
 
-    lines.extend(["## Strengths to Preserve", ""])
-    for item in report["top_strengths"]:
-        timestamps = item.get("timestamps", [])
-        if isinstance(timestamps, str):
-            timestamps = [timestamps]
-        lines.extend(
-            [
-                f"### {item['title']}",
-                "",
-                f"- Evidence: {item['evidence']}",
-                f"- What to repeat: {item.get('what_to_repeat', 'Keep this visible pattern available as a default during explanation.')}",
-                f"- Review at: {', '.join(timestamps)}",
-                f"- Confidence: {item['confidence']}",
-                "",
-            ]
-        )
-    if not report["top_strengths"]:
-        lines.append("- No single strength clearly dominated the clip; use the cited windows as manual review anchors.")
-
-    extra_strengths = report.get("strength_inventory", [])[len(report.get("top_strengths", [])) :]
-    if extra_strengths:
-        lines.extend(["", "## Strength Inventory", ""])
-        for item in extra_strengths:
-            timestamps = item.get("timestamps", [])
-            if isinstance(timestamps, str):
-                timestamps = [timestamps]
-            lines.append(
-                f"- **{item['title']}**: {item['evidence']} Repeat by {item.get('what_to_repeat', 'keeping the same visible pattern available')}"
-                f" Review at {', '.join(timestamps)}. Confidence: {item['confidence']}."
-            )
-
-    if report.get("additional_observation_inventory"):
-        lines.extend(["", "## Additional Observation Inventory", ""])
-        for item in report["additional_observation_inventory"]:
-            timestamps = item.get("timestamps", [])
-            if isinstance(timestamps, str):
-                timestamps = [timestamps]
-            lines.extend(
-                [
-                    f"### {item['title']} ({str(item.get('kind', 'observation')).replace('_', ' ')})",
-                    "",
-                    f"- Evidence: {item['evidence']}",
-                    f"- Suggested response: {item['suggested_response']}",
-                    f"- Review at: {', '.join(timestamps)}",
-                    f"- Confidence: {item['confidence']}",
-                    "",
-                ]
-            )
-
-    if report.get("low_confidence_watchlist"):
-        lines.extend(["## Low-Confidence Watchlist", ""])
-        for item in report["low_confidence_watchlist"]:
+    combined_strengths: list[dict[str, Any]] = []
+    seen_strength_titles: set[str] = set()
+    for item in [*report.get("top_strengths", []), *report.get("strength_inventory", [])]:
+        title = str(item.get("title", "")).strip()
+        title_key = _title_key(title)
+        if not title or not title_key or title_key in seen_strength_titles:
+            continue
+        seen_strength_titles.add(title_key)
+        combined_strengths.append(item)
+    lines.extend(["", "## Strengths", ""])
+    if combined_strengths:
+        for item in combined_strengths:
             timestamps = item.get("timestamps", [])
             if isinstance(timestamps, str):
                 timestamps = [timestamps]
@@ -1919,11 +2267,60 @@ def _render_markdown(report: dict[str, Any], evidence: dict[str, Any], artifacts
                 [
                     f"### {item['title']}",
                     "",
-                    f"- Why it stays on the watchlist: {item['why_watch']}",
-                    f"- What we saw: {item['what_we_saw']}",
-                    f"- What to monitor next: {item['what_to_monitor_next']}",
+                    f"- Evidence: {item.get('evidence', '')}",
+                    f"- What to repeat: {item.get('what_to_repeat', 'Keep this visible pattern available as a default during explanation.')}",
                     f"- Review at: {', '.join(timestamps)}",
-                    f"- Confidence: {item['confidence']}",
+                    f"- Confidence: {item.get('confidence', 'medium')}",
+                    "",
+                ]
+            )
+    else:
+        lines.append("- No single strength clearly dominated the clip; use the cited windows as manual review anchors.")
+
+    action_title_keys = {_title_key(item.get("title")) for item in report.get("priority_actions", [])}
+    merged_watch_items: list[dict[str, Any]] = []
+    seen_watch_titles: set[str] = set()
+    for item in report.get("additional_observation_inventory", []):
+        if _coerce_kind_label(item.get("kind")) == "strength_to_preserve":
+            continue
+        title = str(item.get("title", "")).strip()
+        title_key = _title_key(title)
+        if not title_key or title_key in seen_strength_titles or title_key in action_title_keys or title_key in seen_watch_titles:
+            continue
+        seen_watch_titles.add(title_key)
+        merged_watch_items.append(
+            {
+                "title": title or "Observation",
+                "why_watch": item.get("evidence", ""),
+                "what_we_saw": item.get("evidence", ""),
+                "what_to_monitor_next": item.get("suggested_response", ""),
+                "timestamps": item.get("timestamps", []),
+                "confidence": item.get("confidence", "medium"),
+            }
+        )
+    for item in report.get("low_confidence_watchlist", []):
+        title = str(item.get("title", "")).strip()
+        title_key = _title_key(title)
+        if not title_key or title_key in seen_strength_titles or title_key in action_title_keys or title_key in seen_watch_titles:
+            continue
+        seen_watch_titles.add(title_key)
+        merged_watch_items.append(item)
+
+    if merged_watch_items:
+        lines.extend(["", "## Watch Items (low confidence)", ""])
+        for item in merged_watch_items:
+            timestamps = item.get("timestamps", [])
+            if isinstance(timestamps, str):
+                timestamps = [timestamps]
+            lines.extend(
+                [
+                    f"### {item.get('title', 'Observation')}",
+                    "",
+                    f"- Why watch: {item.get('why_watch') or item.get('evidence', '')}",
+                    f"- What we saw: {item.get('what_we_saw') or item.get('evidence', '')}",
+                    f"- What to monitor next: {item.get('what_to_monitor_next') or item.get('suggested_response', '')}",
+                    f"- Review at: {', '.join(timestamps)}",
+                    f"- Confidence: {item.get('confidence', 'low')}",
                     "",
                 ]
             )
@@ -1931,53 +2328,70 @@ def _render_markdown(report: dict[str, Any], evidence: dict[str, Any], artifacts
     lines.extend(["", "## Moment-by-Moment Evidence", ""])
     moment_lookup = {card["timestamp"]: card for card in evidence["moment_cards"]}
     window_lookup = {window["window_label"]: window for window in evidence["review_windows"]}
-    for card in report["evidence_moments"][:6]:
+    clip_video = evidence["run_context"]["clip_video"]
+    for card in report.get("evidence_moments", [])[:6]:
         lines.extend([f"### {card['timestamp']} - {card['headline']}", ""])
-        moment = moment_lookup.get(card["timestamp"])
-        if moment:
-            pass
+        semantic_text = _moment_semantic_text(card)
         lines.extend(
             [
                 f"- Observed behavior: {card['observed_behavior']}",
                 f"- Metric evidence: {card['metric_evidence']}",
-                f"- Semantic interpretation: {card['qwen_interpretation']}",
+                f"- Semantic interpretation: {semantic_text}",
                 f"- Coaching implication: {card['coaching_implication']}",
-                "",
             ]
         )
         window = window_lookup.get(card["timestamp"])
+        moment = moment_lookup.get(card["timestamp"])
         if window:
-            lines.append(f"QC confidence: `{window['quality_control']['confidence']}`")
-            lines.append("")
+            jump_sec = int(round(float(window["window_start_sec"])))
+            lines.append(f"- [Jump to {_fmt_timestamp(jump_sec)}]({clip_video}#t={jump_sec})")
+            lines.append(f"- Confidence: {window['quality_control']['confidence']}")
+        if moment:
+            image_name = str(moment.get("image_path", "")).strip()
+            if image_name:
+                image_path = artifacts.moments_dir / image_name
+                if image_path.exists():
+                    lines.append(f"- ![](coaching_moments/{image_name})")
+        lines.append("")
 
-    if report["keep_doing"]:
-        lines.extend(["", "## Keep Doing", ""])
+    if report.get("keep_doing"):
+        lines.extend(["## Keep Doing", ""])
         for item in report["keep_doing"]:
             lines.append(f"- {item}")
-
-    if report["watch_for"]:
+    if report.get("watch_for"):
         lines.extend(["", "## Watch For", ""])
         for item in report["watch_for"]:
             lines.append(f"- {item}")
 
-    lines.extend(["", "## Technical Appendix", ""])
     score = evidence["score_snapshot"]
     lines.extend(
         [
+            "",
+            "## Technical Appendix",
+            "",
             _markdown_table(
                 ["Metric", "Value", "Band"],
                 [
-                    ["Overall score", f"{score['overall_score']:.1f}", _metric_band(float(score["overall_score"]))],
                     ["Natural movement", f"{score['natural_movement_score']:.1f}", _metric_band(float(score["natural_movement_score"]))],
                     ["Eye-contact distribution", f"{score['eye_contact_distribution_score']:.1f}", _metric_band(float(score["eye_contact_distribution_score"]))],
                     ["Confidence/presence", f"{score['confidence_presence_score']:.1f}", _metric_band(float(score["confidence_presence_score"]))],
+                    ["Stage usage", f"{score['stage_usage_score']:.1f}", _metric_band(float(score["stage_usage_score"]))],
                 ],
             ),
             "",
+            f"- Movement presence summary: `{json.dumps(evidence['summary_extensions']['movement_presence'], ensure_ascii=True)}`",
+            f"- Facial expressiveness summary: `{json.dumps(evidence['summary_extensions']['facial_expressiveness'], ensure_ascii=True)}`",
+            f"- Gaze dynamics summary: `{json.dumps(evidence['summary_extensions']['gaze_dynamics'], ensure_ascii=True)}`",
             "- Raw metric summary: `summary_full.md`",
             "- Window summary: `window_summary.md`",
             "- Semantic summary: `semantic_extensions/semantic_summary.md` if semantic mode was enabled for the run",
             "- Coaching evidence JSON: `coaching_evidence.json`",
+            "",
+            "## Report Provenance",
+            "",
+            f"- Source mode: `{report.get('source', {}).get('mode', 'unknown')}`",
+            f"- Model: `{report.get('source', {}).get('model') or 'template fallback'}`",
+            "- Teacher-facing report sections are either Gemini-generated, template fallback, or Gemini output merged onto fallback.",
         ]
     )
     return "\n".join(lines).strip() + "\n"
@@ -2032,7 +2446,7 @@ def _render_pdf(markdown_path: Path, output_path: Path) -> None:
     }
     h2 {
       font-size: 15pt;
-      margin-top: 22px;
+      margin-top: 18px;
       border-bottom: 1px solid #cbd6de;
       padding-bottom: 4px;
     }
@@ -2048,6 +2462,60 @@ def _render_pdf(markdown_path: Path, output_path: Path) -> None:
       margin: 8px auto 14px auto;
       max-width: 88%;
       border: 1px solid #d5dde3;
+    }
+    .scorecard {
+      border: 1px solid #c8d4dc;
+      border-radius: 12px;
+      overflow: hidden;
+      margin: 10px 0 18px 0;
+    }
+    .scorecard-top {
+      background: linear-gradient(135deg, #103b52, #265d79);
+      color: #ffffff;
+      padding: 16px 18px 14px 18px;
+    }
+    .scorecard-label {
+      font-family: "DejaVu Sans", Arial, sans-serif;
+      font-size: 10pt;
+      opacity: 0.9;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .scorecard-score {
+      font-family: "DejaVu Sans", Arial, sans-serif;
+      font-size: 28pt;
+      font-weight: 700;
+      margin-top: 4px;
+    }
+    .scorecard-verdict {
+      margin-top: 6px;
+      font-size: 10pt;
+      line-height: 1.4;
+    }
+    table.scorecard-badges {
+      margin: 0;
+      border-top: none;
+    }
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-family: "DejaVu Sans", Arial, sans-serif;
+      font-size: 8.5pt;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+    .badge-green {
+      background: #d8f3dc;
+      color: #1b5e20;
+    }
+    .badge-amber {
+      background: #fff3cd;
+      color: #8a5a00;
+    }
+    .badge-red {
+      background: #f8d7da;
+      color: #842029;
     }
     code {
       background: #f4f7f9;
@@ -2074,6 +2542,13 @@ def _render_pdf(markdown_path: Path, output_path: Path) -> None:
     }
     strong {
       color: #103b52;
+    }
+    blockquote {
+      border-left: 5px solid #d99a00;
+      background: #fff7dd;
+      margin-left: 0;
+      padding: 8px 14px;
+      color: #5d4700;
     }
     """
     HTML(string=html, base_url=str(markdown_path.parent.resolve())).write_pdf(
@@ -2127,6 +2602,7 @@ def run_coaching_report(
             for window in review_windows:
                 qwen_window = _summarize_qwen_window(grouped_annotations.get(window["id"], []))
                 window["qwen"] = qwen_window
+                window["board_context"] = _is_board_context(window, qwen_window)
                 window["evidence_tags"] = _merge_qwen_into_window_tags(window, qwen_window)
                 window["primary_tag"] = _primary_tag(window["evidence_tags"], window["kind"])
                 qwen_by_window[window["id"]] = qwen_window

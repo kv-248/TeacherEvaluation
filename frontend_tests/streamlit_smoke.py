@@ -35,11 +35,11 @@ def main() -> int:
             page.goto(args.app_url, wait_until="networkidle", timeout=args.timeout_ms)
 
             _expect_heading(page, "TeacherEvaluation", args.timeout_ms)
+            _expect_heading(page, "Scorecard", args.timeout_ms)
             _expect_heading(page, "No Material Intervention Needed", args.timeout_ms)
-            _expect_heading(page, "Strengths to Preserve", args.timeout_ms)
-            _expect_heading(page, "Strength Inventory", args.timeout_ms)
-            _expect_heading(page, "Additional Observation Inventory", args.timeout_ms)
-            _expect_heading(page, "Low-Confidence Watchlist", args.timeout_ms)
+            _expect_heading(page, "Strengths", args.timeout_ms)
+            _expect_heading(page, "Watch Items (low confidence)", args.timeout_ms)
+            _expect_heading(page, "Key Moments from This Session", args.timeout_ms)
 
             page.get_by_role("button", name="Download JSON").wait_for(state="visible", timeout=args.timeout_ms)
             page.get_by_role("button", name="Download Markdown").wait_for(state="visible", timeout=args.timeout_ms)

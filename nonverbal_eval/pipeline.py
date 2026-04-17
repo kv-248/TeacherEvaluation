@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import warnings
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -132,6 +133,14 @@ def _risk_band(score: float) -> str:
     return "low"
 
 
+def _scorecard_badge(score: float) -> str:
+    if score >= 75.0:
+        return "green"
+    if score >= 50.0:
+        return "amber"
+    return "red"
+
+
 def _safe_mean(values: pd.Series | np.ndarray | list[float], default: float = 0.0) -> float:
     arr = np.asarray(values, dtype=float)
     if arr.size == 0 or np.all(np.isnan(arr)):
@@ -161,6 +170,55 @@ def _count_transitions(states: pd.Series) -> int:
     if len(values) < 2:
         return 0
     return int(np.sum(values[1:] != values[:-1]))
+
+
+def _coverage_ratio(values: pd.Series | np.ndarray | list[float]) -> float:
+    arr = np.asarray(values, dtype=float)
+    if arr.size == 0:
+        return 0.0
+    return float(np.isfinite(arr).mean())
+
+
+def _normalize_series(values: pd.Series, default: float = 0.5) -> pd.Series:
+    series = pd.to_numeric(values, errors="coerce")
+    if series.dropna().empty:
+        return pd.Series(np.full(len(series), default, dtype=float), index=series.index)
+    low = float(series.min())
+    high = float(series.max())
+    if abs(high - low) < EPS:
+        return pd.Series(np.full(len(series), default, dtype=float), index=series.index)
+    return ((series - low) / (high - low)).clip(lower=0.0, upper=1.0)
+
+
+def _rolling_std_series(values: pd.Series, window_frames: int) -> pd.Series:
+    window = max(int(window_frames), 2)
+    min_periods = max(2, window // 3)
+    return pd.to_numeric(values, errors="coerce").rolling(window=window, min_periods=min_periods).std()
+
+
+def _safe_percentile(values: pd.Series | np.ndarray | list[float], percentile: float, default: float = 0.0) -> float:
+    arr = np.asarray(values, dtype=float)
+    arr = arr[np.isfinite(arr)]
+    if arr.size == 0:
+        return default
+    return float(np.percentile(arr, percentile))
+
+
+def _run_lengths(states: list[int], time_per_step: float) -> list[dict[str, float]]:
+    if not states:
+        return []
+    runs: list[dict[str, float]] = []
+    current = states[0]
+    length = 1
+    for value in states[1:]:
+        if value == current:
+            length += 1
+            continue
+        runs.append({"state": float(current), "count": float(length), "duration_sec": float(length * time_per_step)})
+        current = value
+        length = 1
+    runs.append({"state": float(current), "count": float(length), "duration_sec": float(length * time_per_step)})
+    return runs
 
 
 def _lm_xy(landmarks: list[Any], index: int) -> np.ndarray:
@@ -317,7 +375,10 @@ def _extract_frame_metrics(results: Any, pose_landmark_enum: Any) -> dict[str, A
         "shoulder_width": np.nan,
         "torso_len": np.nan,
         "mid_hip_x": np.nan,
+        "mid_hip_y": np.nan,
         "mid_shoulder_x": np.nan,
+        "mid_ankle_x": np.nan,
+        "mid_ankle_y": np.nan,
         "left_wrist_x": np.nan,
         "left_wrist_y": np.nan,
         "right_wrist_x": np.nan,
@@ -347,12 +408,15 @@ def _extract_frame_metrics(results: Any, pose_landmark_enum: Any) -> dict[str, A
         r_shoulder = _lm_xy(lm, pose_landmark_enum.RIGHT_SHOULDER.value)
         l_hip = _lm_xy(lm, pose_landmark_enum.LEFT_HIP.value)
         r_hip = _lm_xy(lm, pose_landmark_enum.RIGHT_HIP.value)
+        l_ankle = _lm_xy(lm, pose_landmark_enum.LEFT_ANKLE.value)
+        r_ankle = _lm_xy(lm, pose_landmark_enum.RIGHT_ANKLE.value)
         nose = _lm_xy(lm, pose_landmark_enum.NOSE.value)
         l_wrist = _lm_xy(lm, pose_landmark_enum.LEFT_WRIST.value)
         r_wrist = _lm_xy(lm, pose_landmark_enum.RIGHT_WRIST.value)
 
         mid_shoulder = (l_shoulder + r_shoulder) / 2.0
         mid_hip = (l_hip + r_hip) / 2.0
+        mid_ankle = (l_ankle + r_ankle) / 2.0
         shoulder_width = _dist(l_shoulder, r_shoulder)
         torso_len = _dist(mid_shoulder, mid_hip)
 
@@ -375,7 +439,10 @@ def _extract_frame_metrics(results: Any, pose_landmark_enum: Any) -> dict[str, A
                 "shoulder_width": shoulder_width,
                 "torso_len": torso_len,
                 "mid_hip_x": float(mid_hip[0]),
+                "mid_hip_y": float(mid_hip[1]),
                 "mid_shoulder_x": float(mid_shoulder[0]),
+                "mid_ankle_x": float(mid_ankle[0]),
+                "mid_ankle_y": float(mid_ankle[1]),
                 "left_wrist_x": float(l_wrist[0]),
                 "left_wrist_y": float(l_wrist[1]),
                 "right_wrist_x": float(r_wrist[0]),
@@ -471,6 +538,9 @@ def _compute_motion_signals(df: pd.DataFrame, fps: float) -> tuple[pd.DataFrame,
         "right_wrist_y",
         "shoulder_width",
         "mid_hip_x",
+        "mid_hip_y",
+        "mid_ankle_x",
+        "mid_ankle_y",
         "arm_span_ratio",
         "signed_yaw_proxy",
     ]:
@@ -487,6 +557,18 @@ def _compute_motion_signals(df: pd.DataFrame, fps: float) -> tuple[pd.DataFrame,
     shoulder_width = motion_df["shoulder_width"].replace(0, np.nan).bfill().ffill().fillna(1.0)
     gesture_motion = ((left_speed + right_speed) / 2.0) / shoulder_width.to_numpy()
     motion_df["gesture_motion"] = gesture_motion
+    hip_dx = np.diff(motion_df["mid_hip_x"], prepend=motion_df["mid_hip_x"].iloc[0])
+    hip_dy = np.diff(motion_df["mid_hip_y"], prepend=motion_df["mid_hip_y"].iloc[0])
+    hip_drift = np.sqrt(hip_dx**2 + hip_dy**2) / shoulder_width.to_numpy()
+    motion_df["hip_drift"] = hip_drift
+
+    anchor_x = motion_df["mid_ankle_x"].copy()
+    anchor_y = motion_df["mid_ankle_y"].copy()
+    lower_body_mask = anchor_x.notna() & anchor_y.notna()
+    anchor_x = anchor_x.fillna(motion_df["mid_hip_x"])
+    anchor_y = anchor_y.fillna(motion_df["mid_hip_y"])
+    motion_df["floor_x"] = _normalize_series(anchor_x)
+    motion_df["floor_y"] = _normalize_series(anchor_y)
 
     horizontal_range = motion_df["mid_hip_x"].max() - motion_df["mid_hip_x"].min()
     signal = gesture_motion
@@ -499,13 +581,202 @@ def _compute_motion_signals(df: pd.DataFrame, fps: float) -> tuple[pd.DataFrame,
     ldlj = calculate_ldlj(filtered, fps)
     sal = calculate_sal(filtered, fps)
 
+    window_frames = max(int(round(float(_BASE_THRESHOLDS["expressiveness"]["rolling_window_sec"]) * max(fps, 1.0))), 2)
+    motion_df["smile_rolling_std"] = _rolling_std_series(motion_df["smile_proxy"], window_frames)
+    motion_df["brow_rolling_std"] = _rolling_std_series(motion_df["brow_eye_ratio"], window_frames)
+    motion_df["mouth_rolling_std"] = _rolling_std_series(motion_df["mouth_open_ratio"], window_frames)
+
+    pause_cfg = _BASE_THRESHOLDS["pause"]
+    combined_motion = gesture_motion + 0.35 * hip_drift
+    low_motion_mask = np.isfinite(combined_motion) & (combined_motion <= float(pause_cfg["normalized_motion_floor"]))
+    timestamps = motion_df["timestamp_sec"].to_numpy(dtype=float)
+    spans: list[dict[str, float | int]] = []
+    start_idx: int | None = None
+    for idx, is_low_motion in enumerate(low_motion_mask.tolist()):
+        if is_low_motion and start_idx is None:
+            start_idx = idx
+        if not is_low_motion and start_idx is not None:
+            spans.append({"start_idx": start_idx, "end_idx": idx - 1})
+            start_idx = None
+    if start_idx is not None:
+        spans.append({"start_idx": start_idx, "end_idx": len(low_motion_mask) - 1})
+
+    merged_spans: list[dict[str, float | int]] = []
+    merge_gap = float(pause_cfg["merge_gap_sec"])
+    for span in spans:
+        if not merged_spans:
+            merged_spans.append(span)
+            continue
+        prev = merged_spans[-1]
+        prev_end = int(prev["end_idx"])
+        curr_start = int(span["start_idx"])
+        gap = float(timestamps[curr_start] - timestamps[prev_end]) if curr_start < len(timestamps) and prev_end < len(timestamps) else 0.0
+        if gap <= merge_gap:
+            prev["end_idx"] = span["end_idx"]
+        else:
+            merged_spans.append(span)
+
+    pause_events: list[dict[str, Any]] = []
+    pause_state = np.full(len(motion_df), "moving", dtype=object)
+    for span in merged_spans:
+        start_idx = int(span["start_idx"])
+        end_idx = int(span["end_idx"])
+        start_sec = float(timestamps[start_idx])
+        end_sec = float(timestamps[end_idx])
+        duration_sec = float(max(end_sec - start_sec + (1.0 / max(fps, 1.0)), 0.0))
+        if duration_sec < float(pause_cfg["min_duration_sec"]):
+            continue
+        kind = "dramatic_pause" if duration_sec <= float(pause_cfg["dramatic_max_sec"]) else "static_stretch"
+        if duration_sec >= float(pause_cfg["static_min_sec"]):
+            kind = "static_stretch"
+        pause_events.append(
+            {
+                "start_sec": round(start_sec, 3),
+                "end_sec": round(end_sec, 3),
+                "duration_sec": round(duration_sec, 3),
+                "kind": kind,
+            }
+        )
+        pause_state[start_idx : end_idx + 1] = kind
+    motion_df["pause_state"] = pause_state
+
     return motion_df, {
         "gesture_motion_mean": float(np.nanmean(gesture_motion)),
         "gesture_motion_peak": float(np.nanmax(gesture_motion)),
         "gesture_motion_std": float(np.nanstd(gesture_motion)),
+        "hip_drift_mean": float(np.nanmean(hip_drift)),
         "stage_range": float(horizontal_range),
         "ldlj_smoothness_raw": float(ldlj),
         "sal_smoothness_raw": float(sal),
+        "pause_events": pause_events,
+        "lower_body_coverage": float(lower_body_mask.mean()) if len(lower_body_mask) else 0.0,
+    }
+
+
+def _compute_proxemics(df: pd.DataFrame) -> dict[str, Any]:
+    prox_cfg = _BASE_THRESHOLDS["proxemics"]
+    valid = df["floor_x"].notna() & df["floor_y"].notna()
+    valid_count = int(valid.sum())
+    lower_body_coverage = _coverage_ratio(df["mid_ankle_x"])
+    empty = {
+        "available": False,
+        "lower_body_coverage": lower_body_coverage,
+        "zones": {
+            "left": {"dwell_pct": 0.0},
+            "center": {"dwell_pct": 0.0},
+            "right": {"dwell_pct": 0.0},
+        },
+        "zone_transition_count": 0,
+        "static_zone_time_pct": 0.0,
+        "coverage_area_pct": 0.0,
+    }
+    if valid_count == 0 or lower_body_coverage < float(prox_cfg["lower_body_coverage_min"]):
+        return empty
+
+    edges = [0.0, *[float(edge) for edge in prox_cfg["zone_edges"]], 1.0 + EPS]
+    labels = ["left", "center", "right"]
+    zone_series = pd.cut(df.loc[valid, "floor_x"], bins=edges, labels=labels, include_lowest=True)
+    zone_counts = zone_series.value_counts().to_dict()
+    zone_codes = zone_series.map({"left": -1, "center": 0, "right": 1}).astype(float)
+    grid_cols = int(prox_cfg["grid_cols"])
+    grid_rows = int(prox_cfg["grid_rows"])
+    x_bins = np.clip((df.loc[valid, "floor_x"].to_numpy(dtype=float) * grid_cols).astype(int), 0, grid_cols - 1)
+    y_bins = np.clip((df.loc[valid, "floor_y"].to_numpy(dtype=float) * grid_rows).astype(int), 0, grid_rows - 1)
+    occupied = len({(int(x), int(y)) for x, y in zip(x_bins.tolist(), y_bins.tolist(), strict=False)})
+    static_zone_time_pct = 100.0 * max((float(zone_counts.get(label, 0)) / max(valid_count, 1) for label in labels), default=0.0)
+    return {
+        "available": True,
+        "lower_body_coverage": lower_body_coverage,
+        "zones": {
+            label: {"dwell_pct": round(100.0 * float(zone_counts.get(label, 0)) / max(valid_count, 1), 2)}
+            for label in labels
+        },
+        "zone_transition_count": _count_transitions(pd.Series(zone_codes)),
+        "static_zone_time_pct": round(static_zone_time_pct, 2),
+        "coverage_area_pct": round(100.0 * occupied / max(grid_cols * grid_rows, 1), 2),
+    }
+
+
+def _compute_expressiveness_rolling(df: pd.DataFrame, fps: float) -> dict[str, Any]:
+    cfg = _BASE_THRESHOLDS["expressiveness"]
+    coverage = {
+        "smile": _coverage_ratio(df["smile_rolling_std"]),
+        "brow": _coverage_ratio(df["brow_rolling_std"]),
+        "mouth": _coverage_ratio(df["mouth_rolling_std"]),
+    }
+    available = any(value >= 0.25 for value in coverage.values())
+    smile_mean = _safe_mean(df["smile_rolling_std"])
+    brow_mean = _safe_mean(df["brow_rolling_std"])
+    mouth_mean = _safe_mean(df["mouth_rolling_std"])
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", RuntimeWarning)
+        combined = np.nanmean(
+            np.vstack(
+                [
+                    df["smile_rolling_std"].to_numpy(dtype=float),
+                    df["brow_rolling_std"].to_numpy(dtype=float),
+                    df["mouth_rolling_std"].to_numpy(dtype=float),
+                ]
+            ),
+            axis=0,
+        )
+    valid_combined = combined[np.isfinite(combined)]
+    flatness_flag = False
+    if valid_combined.size:
+        flatness_pct = 100.0 * float(np.mean(valid_combined < float(cfg["flatness_std"])))
+        flatness_flag = flatness_pct >= float(cfg["flatness_coverage_pct"])
+    return {
+        "available": available,
+        "smile_rolling_std_mean": round(smile_mean, 5),
+        "brow_rolling_std_mean": round(brow_mean, 5),
+        "mouth_rolling_std_mean": round(mouth_mean, 5),
+        "facial_flatness_flag": bool(flatness_flag),
+        "coverage": coverage,
+    }
+
+
+def _compute_gaze_dynamics(df: pd.DataFrame) -> dict[str, Any]:
+    valid = df["gaze_sector"].dropna().astype(int).tolist()
+    if not valid:
+        return {
+            "available": False,
+            "sector_dwell_mean": 0.0,
+            "sector_dwell_max": 0.0,
+            "sector_distribution_entropy": 0.0,
+            "sweep_rate_per_min": 0.0,
+            "longest_fixation_sec": 0.0,
+        }
+    clip_duration = max(float(df["timestamp_sec"].max() - df["timestamp_sec"].min()), EPS)
+    time_per_step = clip_duration / max(len(valid), 1)
+    runs = _run_lengths(valid, time_per_step)
+    dwell_durations = [float(run["duration_sec"]) for run in runs]
+    counts = [valid.count(-1), valid.count(0), valid.count(1)]
+    transition_count = int(np.sum(np.asarray(valid[1:]) != np.asarray(valid[:-1]))) if len(valid) > 1 else 0
+    return {
+        "available": True,
+        "sector_dwell_mean": round(float(np.mean(dwell_durations)) if dwell_durations else 0.0, 3),
+        "sector_dwell_max": round(float(np.max(dwell_durations)) if dwell_durations else 0.0, 3),
+        "sector_distribution_entropy": round(float(_uniformity_score(counts)), 3),
+        "sweep_rate_per_min": round(float(transition_count / max(clip_duration, EPS) * 60.0), 3),
+        "longest_fixation_sec": round(float(np.max(dwell_durations)) if dwell_durations else 0.0, 3),
+    }
+
+
+def _compute_pause_summary(df: pd.DataFrame, motion_stats: dict[str, float]) -> dict[str, Any]:
+    pause_events = motion_stats.get("pause_events", [])
+    durations = [float(item["duration_sec"]) for item in pause_events]
+    dramatic_count = sum(1 for item in pause_events if item["kind"] == "dramatic_pause")
+    static_count = sum(1 for item in pause_events if item["kind"] == "static_stretch")
+    return {
+        "pause_count": len(pause_events),
+        "dramatic_pause_count": dramatic_count,
+        "static_stretch_count": static_count,
+        "pause_duration": {
+            "mean": round(float(np.mean(durations)) if durations else 0.0, 3),
+            "p90": round(float(np.percentile(durations, 90)) if durations else 0.0, 3),
+            "max": round(float(np.max(durations)) if durations else 0.0, 3),
+        },
+        "pause_events": pause_events,
     }
 
 
@@ -525,10 +796,14 @@ def _build_feedback(summary: dict[str, Any]) -> dict[str, list[str]]:
     watch_items: list[str] = []
     strength_cfg = _BASE_THRESHOLDS["feedback_strengths"]
     watch_cfg = _BASE_THRESHOLDS["feedback_watch"]
+    prox_cfg = _BASE_THRESHOLDS["proxemics"]
 
     gesture = summary["category_feedback"]["gesture_and_facial_expression"]
     posture = summary["category_feedback"]["posture_and_presence"]
     eye_contact = summary["category_feedback"]["eye_contact_and_engagement"]
+    movement_presence = summary["movement_presence"]
+    facial_expressiveness = summary["facial_expressiveness"]
+    gaze_dynamics = summary["gaze_dynamics"]
 
     if gesture["natural_movement_score"] >= float(strength_cfg["natural_movement_min"]):
         strengths.append("Gesture movement looks natural rather than statue-like or mechanical.")
@@ -544,6 +819,14 @@ def _build_feedback(summary: dict[str, Any]) -> dict[str, list[str]]:
         strengths.append("Head and gaze behavior show some distribution across audience sectors rather than a single fixed target.")
     if eye_contact["alertness_score"] >= float(strength_cfg["alertness_min"]):
         strengths.append("The instructor appears alert and attentive to the room.")
+    if movement_presence["available"] and movement_presence["coverage_area_pct"] >= float(prox_cfg["coverage_good_pct"]):
+        strengths.append("Stage movement covers more than one room zone without looking restless.")
+    if movement_presence["dramatic_pause_count"] > 0 and movement_presence["static_stretch_count"] == 0:
+        strengths.append("Short stillness moments look intentional rather than frozen.")
+    if facial_expressiveness["available"] and not facial_expressiveness["facial_flatness_flag"]:
+        strengths.append("Facial variation shows some visible expressive range across the clip.")
+    if gaze_dynamics["available"] and gaze_dynamics["sweep_rate_per_min"] >= 3.0:
+        strengths.append("Eye-contact sweep rate looks active enough to reach more than one room sector over time.")
 
     if gesture["static_behavior_risk"] >= float(watch_cfg["static_behavior_risk_min"]):
         watch_items.append("Movement may be too limited in places; check for stretches of static delivery.")
@@ -559,6 +842,14 @@ def _build_feedback(summary: dict[str, Any]) -> dict[str, list[str]]:
         watch_items.append("Gaze distribution appears uneven; check whether the lecture favors one audience sector.")
     if eye_contact["alertness_score"] < float(watch_cfg["alertness_low_max"]):
         watch_items.append("Alertness cues are weaker than ideal; review eyelid openness and room-facing orientation.")
+    if movement_presence["available"] and movement_presence["static_zone_time_pct"] > float(prox_cfg["static_dwell_pct"]):
+        watch_items.append("Stage use stays anchored to one room zone for long stretches; try one deliberate position change per major point.")
+    if movement_presence["static_stretch_count"] > movement_presence["dramatic_pause_count"]:
+        watch_items.append("Stillness sometimes lasts long enough to read as static rather than deliberate emphasis.")
+    if facial_expressiveness["available"] and facial_expressiveness["facial_flatness_flag"]:
+        watch_items.append("Facial expressive range stays fairly flat; consider adding more visible emphasis at key explanation beats.")
+    if gaze_dynamics["available"] and gaze_dynamics["sweep_rate_per_min"] < 2.0:
+        watch_items.append("Eye-contact sweep rate is low; try a more deliberate left-center-right scan during transitions.")
 
     if not strengths:
         strengths.append("The clip is technically trackable, but no single nonverbal strength clearly dominates in this short window.")
@@ -588,6 +879,11 @@ def _build_summary(df: pd.DataFrame, motion_stats: dict[str, float], clip_info: 
     eye_open_mean = _safe_mean(df["eye_open_ratio"])
     brow_eye_mean = _safe_mean(df["brow_eye_ratio"])
     signed_yaw_std = _safe_std(df["signed_yaw_proxy"])
+    movement_presence = _compute_proxemics(df)
+    pause_summary = _compute_pause_summary(df, motion_stats)
+    movement_presence.update(pause_summary)
+    facial_expressiveness = _compute_expressiveness_rolling(df, float(clip_info["fps"]))
+    gaze_dynamics = _compute_gaze_dynamics(df)
 
     gesture_activity_score = 100.0 * (
         0.45 * _score_linear(gesture_extent_mean, 0.30, 1.10)
@@ -598,11 +894,27 @@ def _build_summary(df: pd.DataFrame, motion_stats: dict[str, float], clip_info: 
         0.55 * _score_linear(motion_stats["sal_smoothness_raw"], -6.0, -1.2)
         + 0.45 * _score_linear(motion_stats["ldlj_smoothness_raw"], 4.0, 16.0)
     )
-    facial_expressivity_score = 100.0 * (
-        0.70 * _score_linear(facial_smile_mean, 0.34, 0.50)
-        + 0.30 * _score_linear(facial_smile_std, 0.005, 0.030)
+    expressiveness_cfg = _BASE_THRESHOLDS["expressiveness"]
+    expressiveness_score = 100.0 * (
+        0.45 * _score_linear(facial_expressiveness["smile_rolling_std_mean"], float(expressiveness_cfg["flatness_std"]), 0.035)
+        + 0.30 * _score_linear(facial_expressiveness["brow_rolling_std_mean"], float(expressiveness_cfg["flatness_std"]) * 0.8, 0.030)
+        + 0.25 * _score_linear(facial_expressiveness["mouth_rolling_std_mean"], float(expressiveness_cfg["flatness_std"]) * 0.8, 0.035)
     )
-    stage_usage_score = 100.0 * _score_linear(motion_stats["stage_range"], 0.04, 0.30)
+    facial_expressivity_score = 100.0 * (
+        0.45 * _score_linear(facial_smile_mean, 0.34, 0.50)
+        + 0.15 * _score_linear(facial_smile_std, 0.005, 0.030)
+        + 0.40 * (expressiveness_score / 100.0)
+    )
+    base_stage_usage_score = 100.0 * _score_linear(motion_stats["stage_range"], 0.04, 0.30)
+    proxemics_stage_score = 100.0 * (
+        0.55 * _score_linear(movement_presence["coverage_area_pct"], 15.0, float(_BASE_THRESHOLDS["proxemics"]["coverage_good_pct"]))
+        + 0.45 * _score_inverse(movement_presence["static_zone_time_pct"], float(_BASE_THRESHOLDS["proxemics"]["static_dwell_pct"]), 90.0)
+    )
+    stage_usage_score = (
+        0.50 * base_stage_usage_score + 0.50 * proxemics_stage_score
+        if movement_presence["available"]
+        else base_stage_usage_score
+    )
 
     sector_counts = {
         "left": int((df["gaze_sector"] == -1).sum()),
@@ -613,8 +925,9 @@ def _build_summary(df: pd.DataFrame, motion_stats: dict[str, float], clip_info: 
     gaze_transition_count = _count_transitions(df["gaze_sector"])
     gaze_transition_rate = gaze_transition_count / clip_duration
     room_scan_score = 100.0 * (
-        0.65 * _score_peak(gaze_transition_rate, 0.05, 0.45, 1.60)
+        0.45 * _score_peak(gaze_transition_rate, 0.05, 0.45, 1.60)
         + 0.35 * _score_linear(signed_yaw_std, 0.08, 0.28)
+        + 0.20 * _score_peak(gaze_dynamics["sweep_rate_per_min"], 2.0, 8.0, 20.0)
     )
     eye_contact_distribution_score = 100.0 * (
         0.45 * (audience_orientation_score / 100.0)
@@ -622,10 +935,27 @@ def _build_summary(df: pd.DataFrame, motion_stats: dict[str, float], clip_info: 
         + 0.20 * (room_scan_score / 100.0)
     )
 
+    pause_cfg = _BASE_THRESHOLDS["pause"]
+    pause_quality_score = 50.0
+    if movement_presence["pause_count"] > 0:
+        dramatic_share = movement_presence["dramatic_pause_count"] / max(movement_presence["pause_count"], 1)
+        static_share = movement_presence["static_stretch_count"] / max(movement_presence["pause_count"], 1)
+        pause_quality_score = 100.0 * (
+            0.45 * _score_linear(dramatic_share, 0.20, 0.80)
+            + 0.30 * _score_inverse(static_share, 0.20, 0.85)
+            + 0.25 * _score_peak(
+                movement_presence["pause_duration"]["mean"],
+                float(pause_cfg["min_duration_sec"]),
+                float(pause_cfg["dramatic_preferred_sec"]),
+                float(pause_cfg["static_min_sec"]) + 0.8,
+            )
+        )
+
     natural_movement_score = 100.0 * (
-        0.40 * _score_peak(motion_stats["gesture_motion_mean"], 0.004, 0.018, 0.050)
-        + 0.35 * (gesture_smoothness_score / 100.0)
-        + 0.25 * _score_peak(gesture_extent_mean, 0.35, 0.95, 1.70)
+        0.30 * _score_peak(motion_stats["gesture_motion_mean"], 0.004, 0.018, 0.050)
+        + 0.25 * (gesture_smoothness_score / 100.0)
+        + 0.20 * _score_peak(gesture_extent_mean, 0.35, 0.95, 1.70)
+        + 0.25 * (pause_quality_score / 100.0)
     )
     static_behavior_risk = 100.0 * (
         0.65 * _score_inverse(motion_stats["gesture_motion_mean"], 0.004, 0.014)
@@ -637,9 +967,10 @@ def _build_summary(df: pd.DataFrame, motion_stats: dict[str, float], clip_info: 
         + 0.20 * _score_linear(gaze_transition_rate, 1.00, 2.50)
     )
     positive_affect_score = 100.0 * (
-        0.60 * _score_linear(facial_smile_mean, 0.32, 0.44)
-        + 0.20 * _score_linear(facial_smile_std, 0.006, 0.028)
-        + 0.20 * _score_linear(open_palm_ratio, 0.10, 0.75)
+        0.42 * _score_linear(facial_smile_mean, 0.32, 0.44)
+        + 0.14 * _score_linear(facial_smile_std, 0.006, 0.028)
+        + 0.14 * _score_linear(open_palm_ratio, 0.10, 0.75)
+        + 0.30 * (expressiveness_score / 100.0)
     )
     tension_hostility_risk = 100.0 * (
         0.35 * _score_inverse(facial_smile_mean, 0.28, 0.36)
@@ -650,8 +981,16 @@ def _build_summary(df: pd.DataFrame, motion_stats: dict[str, float], clip_info: 
     )
     rigidity_risk = 100.0 * (
         0.40 * _score_inverse(motion_stats["gesture_motion_std"], 0.006, 0.022)
-        + 0.35 * _score_inverse(facial_smile_std, 0.006, 0.022)
-        + 0.25 * _score_inverse(mouth_open_std, 0.006, 0.020)
+        + 0.35 * _score_inverse(
+            facial_expressiveness["smile_rolling_std_mean"] if facial_expressiveness["available"] else facial_smile_std,
+            0.006,
+            0.022,
+        )
+        + 0.25 * _score_inverse(
+            facial_expressiveness["mouth_rolling_std_mean"] if facial_expressiveness["available"] else mouth_open_std,
+            0.006,
+            0.020,
+        )
     )
     confidence_presence_score = 100.0 * (
         0.45 * (posture_score / 100.0)
@@ -697,6 +1036,8 @@ def _build_summary(df: pd.DataFrame, motion_stats: dict[str, float], clip_info: 
         warnings.append("Face coverage dropped below 95%; audience orientation and facial scores are less stable.")
     if hand_coverage < float(_BASE_THRESHOLDS["quality_control"]["hand_stable_min"]):
         warnings.append("Hand coverage dropped below 85%; gesture classification is less stable.")
+    if movement_presence["lower_body_coverage"] < float(_BASE_THRESHOLDS["proxemics"]["lower_body_coverage_min"]):
+        warnings.append("Lower-body coverage is limited; proxemics and floor-anchor cues are less stable.")
     if clip_info["duration_sec_actual"] < clip_info["duration_sec_requested"] * 0.95:
         warnings.append("Extracted clip is shorter than requested.")
     if clip_duration < float(_BASE_THRESHOLDS["quality_control"]["short_clip_sec"]):
@@ -765,6 +1106,7 @@ def _build_summary(df: pd.DataFrame, motion_stats: dict[str, float], clip_info: 
             "gesture_motion_mean": motion_stats["gesture_motion_mean"],
             "gesture_motion_peak": motion_stats["gesture_motion_peak"],
             "gesture_motion_std": motion_stats["gesture_motion_std"],
+            "hip_drift_mean": motion_stats["hip_drift_mean"],
             "open_palm_ratio": open_palm_ratio,
             "pointing_ratio": pointing_ratio,
             "fist_ratio": fist_ratio,
@@ -776,15 +1118,22 @@ def _build_summary(df: pd.DataFrame, motion_stats: dict[str, float], clip_info: 
             "brow_eye_mean": brow_eye_mean,
             "signed_yaw_std": signed_yaw_std,
             "stage_range": motion_stats["stage_range"],
+            "base_stage_usage_score": base_stage_usage_score,
+            "pause_quality_score": pause_quality_score,
+            "expressiveness_score": expressiveness_score,
             "ldlj_smoothness_raw": motion_stats["ldlj_smoothness_raw"],
             "sal_smoothness_raw": motion_stats["sal_smoothness_raw"],
         },
+        "movement_presence": movement_presence,
+        "facial_expressiveness": facial_expressiveness,
+        "gaze_dynamics": gaze_dynamics,
         "interpretation": {
             "audience_orientation": _band(audience_orientation_score),
             "posture_stability": _band(posture_score),
             "gesture_activity": _band(gesture_activity_score),
             "gesture_smoothness": _band(gesture_smoothness_score),
             "facial_expressivity": _band(facial_expressivity_score),
+            "stage_usage": _band(stage_usage_score),
             "natural_movement": _band(natural_movement_score),
             "positive_affect": _band(positive_affect_score),
             "enthusiasm": _band(enthusiasm_score),
@@ -803,6 +1152,7 @@ def _build_summary(df: pd.DataFrame, motion_stats: dict[str, float], clip_info: 
             "These scores are heuristic nonverbal proxies based on pretrained landmark detectors.",
             "They are suited to reflective feedback, not high-stakes evaluation or causal claims about teaching quality.",
             "Eye-contact distribution is approximated from head/face orientation and sector changes, not true pupil-level gaze.",
+            "Proxemics, pause structure, and expressive-range thresholds are initial heuristic bands that should be calibrated against the curated dataset.",
         ],
     }
     summary["feedback"] = _build_feedback(summary)
@@ -1242,107 +1592,248 @@ def annotate_keyframe(keyframe_path: Path, output_path: Path, summary: dict[str,
     log_event(events_path, "keyframe_annotated", keyframe_path=str(output_path))
 
 
-def save_summary_markdown(summary: dict[str, Any], artifacts: ExperimentArtifacts) -> None:
-    score_block = summary["scores"]
+def _scorecard_payload(summary: dict[str, Any]) -> dict[str, Any]:
+    score = summary["scores"]
+    overall = float(score["heuristic_nonverbal_score"])
+    verdict = {
+        "strong": "Strong visible nonverbal support for presence and engagement.",
+        "moderate": "Mixed but usable visible nonverbal support with clear coaching angles.",
+        "limited": "Several nonverbal signals need follow-up or closer review.",
+    }[summary["interpretation"]["overall_nonverbal_signal"]]
+    badges = [
+        ("Posture", float(score["posture_stability_score"])),
+        ("Eye-contact distribution", float(score["eye_contact_distribution_score"])),
+        ("Gesture smoothness", float(score["gesture_smoothness_score"])),
+        ("Positive affect", float(score["positive_affect_score"])),
+        ("Stage usage", float(score["stage_usage_score"])),
+    ]
+    return {
+        "overall_score": round(overall, 1),
+        "verdict": verdict,
+        "badges": [
+            {
+                "label": label,
+                "score": round(value, 1),
+                "status": _scorecard_badge(value),
+            }
+            for label, value in badges
+        ],
+    }
+
+
+def _render_scorecard(report: dict[str, Any] | None, summary: dict[str, Any], *, show_overall_score: bool = True) -> str:
+    payload = (report or {}).get("scorecard") if isinstance(report, dict) else None
+    if not isinstance(payload, dict):
+        payload = _scorecard_payload(summary)
+    rows = []
+    for badge in payload.get("badges", []):
+        status = str(badge.get("status", "amber"))
+        rows.append(
+            "<tr>"
+            f"<td>{badge.get('label', 'Metric')}</td>"
+            f"<td>{float(badge.get('score', 0.0)):.1f}</td>"
+            f"<td><span class=\"badge badge-{status}\">{status}</span></td>"
+            "</tr>"
+        )
+    table_html = "\n".join(rows)
+    top_html = (
+        "<div class=\"scorecard-top\">"
+        "<div class=\"scorecard-label\">Overall nonverbal score</div>"
+        f"<div class=\"scorecard-score\">{float(payload.get('overall_score', 0.0)):.1f}</div>"
+        f"<div class=\"scorecard-verdict\">{payload.get('verdict', '')}</div>"
+        "</div>"
+    )
+    if not show_overall_score:
+        top_html = (
+            "<div class=\"scorecard-top\">"
+            "<div class=\"scorecard-label\">Teacher coaching snapshot</div>"
+            f"<div class=\"scorecard-verdict\">{payload.get('verdict', '')}</div>"
+            "</div>"
+        )
+    return (
+        "<div class=\"scorecard\">"
+        f"{top_html}"
+        "<table class=\"scorecard-badges\">"
+        "<thead><tr><th>Signal</th><th>Score</th><th>Band</th></tr></thead>"
+        f"<tbody>{table_html}</tbody>"
+        "</table>"
+        "</div>"
+    )
+
+
+def _markdown_table(headers: list[str], rows: list[list[str]]) -> str:
+    lines = [
+        "| " + " | ".join(headers) + " |",
+        "| " + " | ".join(["---"] * len(headers)) + " |",
+    ]
+    for row in rows:
+        lines.append("| " + " | ".join(row) + " |")
+    return "\n".join(lines)
+
+
+def _interpret_metric(name: str, value: float, thresholds: dict[str, Any] | None = None) -> str:
+    thresholds = thresholds or _BASE_THRESHOLDS
+    label = name.replace("_", " ")
+    if name == "coverage_area_pct":
+        band = "broad room coverage" if value >= float(thresholds["proxemics"]["coverage_good_pct"]) else "limited room coverage"
+        return f"Coverage area: {value:.1f}% -> {band}"
+    if name == "static_zone_time_pct":
+        band = "anchored to one zone" if value > float(thresholds["proxemics"]["static_dwell_pct"]) else "not overly anchored"
+        return f"Static-zone time: {value:.1f}% -> {band}"
+    if name == "sweep_rate_per_min":
+        band = "low sweep rate" if value < 2.0 else "active sweep rate" if value >= 3.0 else "moderate sweep rate"
+        return f"Eye-contact sweep rate: {value:.2f}/min -> {band}"
+    if name in {"sector_distribution_entropy", "sector_balance_score"}:
+        band = "balanced distribution" if value >= 0.70 else "uneven distribution" if value < 0.45 else "mixed distribution"
+        return f"{label.title()}: {value:.3f} -> {band}"
+    if name in {"smile_rolling_std_mean", "brow_rolling_std_mean", "mouth_rolling_std_mean"}:
+        band = "low expressive range" if value < float(thresholds["expressiveness"]["flatness_std"]) else "visible expressive variation"
+        pretty = label.replace(" rolling std mean", " variability").replace("std", "variability")
+        return f"{pretty.title()}: {value:.3f} -> {band}"
+    if name == "longest_fixation_sec":
+        band = "long fixation" if value >= 6.0 else "no unusually long fixation"
+        return f"Longest fixation: {value:.2f}s -> {band}"
+    if name in {"pause_mean", "pause_p90", "pause_max"}:
+        band = "brief settled pauses" if value <= 3.0 else "long stillness"
+        pretty = name.replace("pause_", "Pause ").upper() if name == "pause_p90" else name.replace("_", " ").title()
+        return f"{pretty}: {value:.2f}s -> {band}"
+    if name == "heuristic_nonverbal_score":
+        return f"Overall score: {value:.1f} -> {_band(value)}"
+    if "risk" in name:
+        return f"{label.title()}: {value:.1f} -> {_risk_band(value)} risk"
+    return f"{label.title()}: {value:.3f}" if abs(value) < 10 else f"{label.title()}: {value:.1f}"
+
+
+def _render_markdown_summary(summary: dict[str, Any]) -> str:
+    score = summary["scores"]
     qc = summary["quality_control"]
     raw = summary["raw_metrics"]
     gesture = summary["category_feedback"]["gesture_and_facial_expression"]
     posture = summary["category_feedback"]["posture_and_presence"]
     eye_contact = summary["category_feedback"]["eye_contact_and_engagement"]
+    movement = summary["movement_presence"]
+    facial = summary["facial_expressiveness"]
+    gaze = summary["gaze_dynamics"]
 
-    md = f"""# Nonverbal Cue Experiment
-
-## Clip
-
-- Source clip: `{summary['clip']['clip_video']}`
-- Start: `{summary['clip']['start_sec']:.2f}s`
-- Duration requested: `{summary['clip']['duration_sec_requested']:.2f}s`
-- Frames analyzed: `{qc['frames_analyzed']}`
-- FPS: `{summary['clip']['fps']:.2f}`
-
-## Quality Control
-
-- Pose coverage: `{qc['pose_coverage']:.3f}`
-- Face coverage: `{qc['face_coverage']:.3f}`
-- Hand coverage: `{qc['hand_coverage']:.3f}`
-
-## Scores
-
-- Natural movement: `{score_block['natural_movement_score']:.1f}` ({summary['interpretation']['natural_movement']})
-- Positive affect: `{score_block['positive_affect_score']:.1f}` ({summary['interpretation']['positive_affect']})
-- Enthusiasm: `{score_block['enthusiasm_score']:.1f}` ({summary['interpretation']['enthusiasm']})
-- Posture stability: `{score_block['posture_stability_score']:.1f}` ({summary['interpretation']['posture_stability']})
-- Confidence/presence: `{score_block['confidence_presence_score']:.1f}` ({summary['interpretation']['confidence_presence']})
-- Audience orientation: `{score_block['audience_orientation_score']:.1f}` ({summary['interpretation']['audience_orientation']})
-- Eye-contact distribution: `{score_block['eye_contact_distribution_score']:.1f}` ({summary['interpretation']['eye_contact_distribution']})
-- Alertness: `{score_block['alertness_score']:.1f}` ({summary['interpretation']['alertness']})
-- Gesture smoothness: `{score_block['gesture_smoothness_score']:.1f}` ({summary['interpretation']['gesture_smoothness']})
-- Stage usage: `{score_block['stage_usage_score']:.1f}`
-- Heuristic nonverbal score: `{score_block['heuristic_nonverbal_score']:.1f}` ({summary['interpretation']['overall_nonverbal_signal']})
-
-## Risks
-
-- Static behavior risk: `{gesture['static_behavior_risk']:.1f}` ({summary['interpretation']['static_behavior_risk']})
-- Excessive animation risk: `{gesture['excessive_animation_risk']:.1f}` ({summary['interpretation']['excessive_animation_risk']})
-- Tension/hostility risk: `{gesture['tension_hostility_risk']:.1f}` ({summary['interpretation']['tension_hostility_risk']})
-- Rigidity risk: `{gesture['rigidity_risk']:.1f}` ({summary['interpretation']['rigidity_risk']})
-- Closed-posture risk: `{posture['closed_posture_risk']:.1f}` ({summary['interpretation']['closed_posture_risk']})
-
-## Raw Metrics
-
-- Gesture extent mean: `{raw['gesture_extent_mean']:.3f}`
-- Arm span mean: `{raw['arm_span_mean']:.3f}`
-- Gesture motion mean: `{raw['gesture_motion_mean']:.4f}`
-- Gesture motion peak: `{raw['gesture_motion_peak']:.4f}`
-- Gesture motion std: `{raw['gesture_motion_std']:.4f}`
-- Open palm ratio: `{raw['open_palm_ratio']:.3f}`
-- Pointing ratio: `{raw['pointing_ratio']:.3f}`
-- Fist ratio: `{raw['fist_ratio']:.3f}`
-- Smile proxy mean: `{raw['smile_proxy_mean']:.3f}`
-- Smile proxy std: `{raw['smile_proxy_std']:.4f}`
-- Mouth open mean: `{raw['mouth_open_mean']:.4f}`
-- Mouth open std: `{raw['mouth_open_std']:.4f}`
-- Eye open mean: `{raw['eye_open_mean']:.4f}`
-- Brow-eye mean: `{raw['brow_eye_mean']:.4f}`
-- Signed yaw std: `{raw['signed_yaw_std']:.4f}`
-- Stage range: `{raw['stage_range']:.3f}`
-- LDLJ raw: `{raw['ldlj_smoothness_raw']:.3f}`
-- SAL raw: `{raw['sal_smoothness_raw']:.3f}`
-
-## Eye-Contact Proxy
-
-- Sector balance score: `{eye_contact['sector_balance_score']:.1f}`
-- Room scan score: `{eye_contact['room_scan_score']:.1f}`
-- Sector distribution: `left={eye_contact['sector_distribution']['left']}, center={eye_contact['sector_distribution']['center']}, right={eye_contact['sector_distribution']['right']}`
-- Gaze transitions: `{eye_contact['gaze_transition_count']}`
-- Gaze transition rate/sec: `{eye_contact['gaze_transition_rate_per_sec']:.3f}`
-
-## Feedback
-
-### Strengths
-"""
+    lines = [
+        "# Nonverbal Cue Experiment",
+        "",
+        "## Scorecard",
+        "",
+        _render_scorecard(None, summary),
+        "",
+        f"- Clip: `{summary['clip']['clip_video']}`",
+        f"- Start: `{summary['clip']['start_sec']:.2f}s`",
+        f"- Duration requested: `{summary['clip']['duration_sec_requested']:.2f}s`",
+        f"- FPS: `{summary['clip']['fps']:.2f}`",
+        "",
+        "## Feedback",
+        "",
+        "### Strengths",
+    ]
     for item in summary["feedback"]["strengths"]:
-        md += f"- {item}\n"
-
-    md += "\n### Watch Items\n"
+        lines.append(f"- {item}")
+    lines.extend(["", "### Watch Items"])
     for item in summary["feedback"]["watch_items"]:
-        md += f"- {item}\n"
+        lines.append(f"- {item}")
 
-    md += "\n## Manual Review\n\n"
-    md += f"- Grooming/professional appearance: `{posture['grooming_assessment']['status']}`\n"
-    md += f"- Reason: {posture['grooming_assessment']['reason']}\n"
+    lines.extend(
+        [
+            "",
+            "## Movement & Presence",
+            "",
+            _markdown_table(
+                ["Zone", "Dwell %"],
+                [
+                    ["Left", f"{movement['zones']['left']['dwell_pct']:.1f}"],
+                    ["Center", f"{movement['zones']['center']['dwell_pct']:.1f}"],
+                    ["Right", f"{movement['zones']['right']['dwell_pct']:.1f}"],
+                ],
+            ),
+            "",
+            f"- {_interpret_metric('coverage_area_pct', float(movement['coverage_area_pct']))}",
+            f"- {_interpret_metric('static_zone_time_pct', float(movement['static_zone_time_pct']))}",
+            f"- Zone transitions: `{movement['zone_transition_count']}`",
+            f"- Pause count: `{movement['pause_count']}` (`dramatic={movement['dramatic_pause_count']}`, `static={movement['static_stretch_count']}`)",
+            f"- {_interpret_metric('pause_mean', float(movement['pause_duration']['mean']))}",
+            f"- {_interpret_metric('pause_p90', float(movement['pause_duration']['p90']))}",
+            f"- {_interpret_metric('pause_max', float(movement['pause_duration']['max']))}",
+            "",
+            "## Facial Expressiveness",
+            "",
+            f"- {_interpret_metric('smile_rolling_std_mean', float(facial['smile_rolling_std_mean']))}",
+            f"- {_interpret_metric('brow_rolling_std_mean', float(facial['brow_rolling_std_mean']))}",
+            f"- {_interpret_metric('mouth_rolling_std_mean', float(facial['mouth_rolling_std_mean']))}",
+            f"- Facial flatness flag: `{bool(facial['facial_flatness_flag'])}`",
+            "",
+            "## Eye-Contact Dynamics",
+            "",
+            f"- {_interpret_metric('sweep_rate_per_min', float(gaze['sweep_rate_per_min']))}",
+            f"- {_interpret_metric('sector_distribution_entropy', float(gaze['sector_distribution_entropy']))}",
+            f"- Mean sector dwell: `{float(gaze['sector_dwell_mean']):.2f}s`",
+            f"- {_interpret_metric('longest_fixation_sec', float(gaze['longest_fixation_sec']))}",
+            f"- Sector balance score: `{eye_contact['sector_balance_score']:.1f}`",
+            f"- Room scan score: `{eye_contact['room_scan_score']:.1f}`",
+            "",
+            "## Quality Control",
+            "",
+            f"- Pose coverage: `{qc['pose_coverage']:.3f}`",
+            f"- Face coverage: `{qc['face_coverage']:.3f}`",
+            f"- Hand coverage: `{qc['hand_coverage']:.3f}`",
+            f"- Lower-body coverage: `{movement['lower_body_coverage']:.3f}`",
+            f"- Frames analyzed: `{qc['frames_analyzed']}`",
+            "",
+            "## Raw Metrics (Appendix)",
+            "",
+            f"- {_interpret_metric('heuristic_nonverbal_score', float(score['heuristic_nonverbal_score']))}",
+            f"- {_interpret_metric('stage_usage_score', float(score['stage_usage_score']))}",
+            f"- {_interpret_metric('static_behavior_risk', float(gesture['static_behavior_risk']))}",
+            f"- {_interpret_metric('excessive_animation_risk', float(gesture['excessive_animation_risk']))}",
+            f"- {_interpret_metric('tension_hostility_risk', float(gesture['tension_hostility_risk']))}",
+            f"- {_interpret_metric('rigidity_risk', float(gesture['rigidity_risk']))}",
+            f"- {_interpret_metric('closed_posture_risk', float(posture['closed_posture_risk']))}",
+            f"- Gesture extent mean: `{raw['gesture_extent_mean']:.3f}`",
+            f"- Arm span mean: `{raw['arm_span_mean']:.3f}`",
+            f"- Gesture motion mean: `{raw['gesture_motion_mean']:.4f}`",
+            f"- Gesture motion peak: `{raw['gesture_motion_peak']:.4f}`",
+            f"- Gesture motion std: `{raw['gesture_motion_std']:.4f}`",
+            f"- Hip drift mean: `{raw['hip_drift_mean']:.4f}`",
+            f"- Open palm ratio: `{raw['open_palm_ratio']:.3f}`",
+            f"- Pointing ratio: `{raw['pointing_ratio']:.3f}`",
+            f"- Fist ratio: `{raw['fist_ratio']:.3f}`",
+            f"- Smile proxy mean: `{raw['smile_proxy_mean']:.3f}`",
+            f"- Smile proxy std: `{raw['smile_proxy_std']:.4f}`",
+            f"- Mouth open mean: `{raw['mouth_open_mean']:.4f}`",
+            f"- Mouth open std: `{raw['mouth_open_std']:.4f}`",
+            f"- Eye open mean: `{raw['eye_open_mean']:.4f}`",
+            f"- Brow-eye mean: `{raw['brow_eye_mean']:.4f}`",
+            f"- Signed yaw std: `{raw['signed_yaw_std']:.4f}`",
+            f"- Stage range: `{raw['stage_range']:.3f}`",
+            f"- Base stage-usage score: `{raw['base_stage_usage_score']:.1f}`",
+            f"- Pause-quality score: `{raw['pause_quality_score']:.1f}`",
+            f"- Expressiveness score: `{raw['expressiveness_score']:.1f}`",
+            f"- LDLJ raw: `{raw['ldlj_smoothness_raw']:.3f}`",
+            f"- SAL raw: `{raw['sal_smoothness_raw']:.3f}`",
+            "",
+            "## Manual Review",
+            "",
+            f"- Grooming/professional appearance: `{posture['grooming_assessment']['status']}`",
+            f"- Reason: {posture['grooming_assessment']['reason']}",
+        ]
+    )
     for item in summary["category_feedback"]["manual_review_items"]:
-        md += f"- {item}\n"
-
-    md += "\n## Warnings\n\n"
+        lines.append(f"- {item}")
+    lines.extend(["", "## Warnings", ""])
     if summary["warnings"]:
         for warning in summary["warnings"]:
-            md += f"- {warning}\n"
+            lines.append(f"- {warning}")
     else:
-        md += "- None\n"
-
-    md += "\n## Notes\n\n"
+        lines.append("- None")
+    lines.extend(["", "## Notes", ""])
     for note in summary["notes"]:
-        md += f"- {note}\n"
+        lines.append(f"- {note}")
+    return "\n".join(lines).strip() + "\n"
 
-    artifacts.summary_md_path.write_text(md, encoding="utf-8")
+
+def save_summary_markdown(summary: dict[str, Any], artifacts: ExperimentArtifacts) -> None:
+    artifacts.summary_md_path.write_text(_render_markdown_summary(summary), encoding="utf-8")

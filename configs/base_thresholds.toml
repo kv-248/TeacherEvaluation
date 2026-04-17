@@ -15,6 +15,27 @@ moderate_min = 55.0
 high_min = 65.0
 moderate_min = 35.0
 
+[pause]
+min_duration_sec = 0.8
+dramatic_max_sec = 3.0
+static_min_sec = 3.0
+merge_gap_sec = 0.4
+normalized_motion_floor = 0.01
+dramatic_preferred_sec = 1.8
+
+[expressiveness]
+rolling_window_sec = 5.0
+flatness_std = 0.015
+flatness_coverage_pct = 50.0
+
+[proxemics]
+zone_edges = [0.33, 0.66]
+static_dwell_pct = 60.0
+coverage_good_pct = 50.0
+grid_cols = 6
+grid_rows = 4
+lower_body_coverage_min = 0.35
+
 [feedback_strengths]
 natural_movement_min = 70.0
 positive_affect_min = 55.0
@@ -62,6 +83,11 @@ score_hand_min = 0.85
 score_duration_sec_min = 45.0
 high_score_min = 4
 medium_score_min = 2
+hard_low_face_max = 0.55
+hard_low_combo_face_max = 0.70
+hard_low_combo_hand_max = 0.60
+cap_high_face_max = 0.88
+cap_high_hand_max = 0.75
 
 [coaching.candidate_thresholds]
 eye_contact_action_max = 68.0
@@ -75,14 +101,29 @@ face_coverage_low_max = 0.85
 affect_face_coverage_min = 0.90
 eye_distribution_low_max = 55.0
 audience_orientation_low_max = 55.0
+board_context_audience_orientation_max = 45.0
+board_context_face_coverage_max = 0.50
+board_context_board_focus_min = 0.55
+board_context_writing_ratio_min = 0.40
+board_context_note_window_ratio_min = 0.34
 presence_low_max = 60.0
 closed_posture_risk_min = 35.0
 natural_movement_low_max = 45.0
 static_behavior_risk_min = 35.0
-excessive_animation_risk_min = 50.0
+excessive_animation_risk_min = 65.0
+excessive_animation_risk_high_min = 88.0
+over_animation_peak_min = 5.0
+over_animation_peak_high_min = 11.0
+over_animation_std_min = 0.55
+over_animation_std_high_min = 1.15
+over_animation_extent_min = 3.2
+over_animation_extent_high_min = 4.6
+over_animation_hand_coverage_min = 0.45
 positive_affect_low_max = 50.0
 tension_hostility_risk_min = 35.0
 alertness_low_max = 60.0
+stage_anchor_static_min = 60.0
+sweep_rate_low_max = 2.0
 strength_eye_distribution_min = 70.0
 strength_presence_min = 75.0
 strength_posture_min = 75.0
@@ -90,6 +131,8 @@ strength_natural_movement_min = 65.0
 strength_excessive_animation_max = 35.0
 strength_positive_affect_min = 55.0
 strength_alertness_min = 75.0
+strength_stage_coverage_min = 35.0
+strength_sweep_rate_min = 3.0
 
 [coaching.report_shape]
 material_clip_min_sec = 20.0

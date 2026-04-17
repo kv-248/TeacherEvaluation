@@ -941,6 +941,35 @@ The next serious validation step is not model training. It is:
 
 That is the correct next research move under the current constraints.
 
+### 11.5 Thesis Traceability Addendum for the V2 Update
+
+The next implementation pass adds four new strictly nonverbal cue families and moves the semantic/coaching defaults to Gemini Pro. Because this document supports a thesis project, those changes should be described with a clearer evidence hierarchy than the earlier prototype notes used.
+
+The recommended evidence tiers are:
+
+- `Peer-reviewed educational / behavioral evidence` for claims about proxemics, gaze dynamics, pause structure, facial expressiveness, and actionable teacher feedback.
+- `Multimodal classroom-observation systems evidence` for the claim that VLM-backed classroom observation is now a legitimate systems pattern.
+- `Model-capability / operational evidence` for the Gemini choice. The defensible claim is not that peer-reviewed education research proves Gemini Pro is better than Flash for coaching. The defensible claim is that Pro is the higher-capability multimodal reasoning tier, and local operational logs showed repeated Flash quota pressure in this repo.
+
+The V2 cue additions should be summarized with the following traceability matrix.
+
+| Construct | Implementation signal | Summary keys | Threshold provenance | Teacher-facing claim boundary | Sources |
+| --- | --- | --- | --- | --- | --- |
+| Proxemics / stage movement | `floor_x`, `floor_y`, left-center-right dwell, zone transitions, 2D coverage occupancy | `movement_presence.zones.*.dwell_pct`, `movement_presence.zone_transition_count`, `movement_presence.static_zone_time_pct`, `movement_presence.coverage_area_pct` | `zone_edges` is an initial heuristic for calibration; static dwell and coverage bands are heuristic bands derived from immediacy literature | Report as room coverage, anchoring, and movement variety. Do not claim a single ideal movement pattern. | Andersen (1979); Witt et al. (2004); Liu et al. (2021); Ballester et al. (2025) |
+| Pause / stillness events | low `gesture_motion` plus low body-drift spans merged into contiguous pause events | `movement_presence.pause_count`, `movement_presence.dramatic_pause_count`, `movement_presence.static_stretch_count`, `movement_presence.pause_duration.*` | `static_min_sec=3.0` is literature-anchored by wait-time work; shorter dramatic-pause bands are heuristic bands derived from literature | Report as visible pause structure and stillness, not as definitive pedagogical wait-time quality without turn-taking or audio context. | Rowe (1986); Tobin (1987); Stahl (1994) |
+| Gaze sweep dynamics | dwell runs and transition frequency over `gaze_sector` time series | `gaze_dynamics.sector_dwell_mean`, `gaze_dynamics.sector_dwell_max`, `gaze_dynamics.sector_distribution_entropy`, `gaze_dynamics.sweep_rate_per_min`, `gaze_dynamics.longest_fixation_sec` | Entropy and sweep-rate bands are heuristic bands derived from literature | Report as room-facing distribution and sweep behavior, not true pupil-level eye contact. | Pi et al. (2020); Smidekova et al. (2020); McIntyre et al. (2017); Goldberg et al. (2021) |
+| Facial expressiveness variance | rolling standard deviation of smile, brow-eye, and mouth-open proxies | `facial_expressiveness.smile_rolling_std_mean`, `facial_expressiveness.brow_rolling_std_mean`, `facial_expressiveness.mouth_rolling_std_mean`, `facial_expressiveness.facial_flatness_flag` | Flatness thresholds are initial heuristics for calibration; the construct itself is literature-backed | Report as expressive range or facial flatness watch-items. Do not imply that more expressiveness is always better. | Tikochinski et al. (2025); Wang et al. (2022); Ekman and Friesen (1978) |
+| Readable teacher report | scorecard, merged sections, moment-linked evidence, plain-language metric interpretation | `scorecard`, `priority_actions`, `top_strengths`, `evidence_moments`, `confidence_notes` | Design choice rather than a numeric threshold | Claim that concrete, brief, timestamped feedback is more coachable than raw metric dumps. | Demszky et al. (2024); Nadaf et al. (2025 preprint) |
+| Gemini Pro default | `gemini-2.5-pro` default with dynamic thinking budget and existing retries | runtime default model, request metadata logs, coaching and semantic model selection | Operational choice; not a pedagogical threshold | Claim this is a system-engineering decision grounded in multimodal capability evidence plus local Flash quota failures. | Zheng et al. (2024); Comanici et al. (2025); Google Developers Blog (2025); repo runtime logs |
+
+The threshold-language labels used in the code should also appear in the thesis write-up:
+
+- `literature-anchored`: use when the literature supports the approximate cutoff directly enough to justify the band.
+- `heuristic band derived from literature`: use when the construct is well supported, but the exact cutoff is still an implementation choice.
+- `initial heuristic for calibration`: use when the construct is supported but the threshold still needs calibration against the curated lecture set.
+
+This matters because the strongest thesis claim here is not that every cutoff is canonical. The strongest claim is that each automated cue is traceable, bounded, and honestly labeled according to the strength of its evidence.
+
 ## 12. Conclusion
 
 The implemented prototype is a research-grounded, interpretable nonverbal analytics system for teacher lecture video review. Its strongest contributions are not that it "solves teacher evaluation," but that it:
@@ -968,3 +997,19 @@ The literature supports the overall design direction. Expressiveness, gaze, gest
 12. Pang, S., Lai, S., Zhang, A., Yang, Y., & Sun, D. (2023). *Graph convolutional network for automatic detection of teachers' nonverbal behavior*. Computers & Education: Artificial Intelligence, 5, 100174. https://doi.org/10.1016/j.caeai.2023.100174
 13. Renier, L. A., Schmid Mast, M., Dael, N., & Kleinlogel, E. P. (2021). *Nonverbal Social Sensing: What Social Sensing Can and Cannot Do for the Study of Nonverbal Behavior From Video*. Frontiers in Psychology, 12, 606548. https://doi.org/10.3389/fpsyg.2021.606548
 14. Futterer, T., Hou, R., Buhler, B., Bozkir, E., Bell, C., Kasneci, E., Gerjets, P., & Trautwein, U. (2026). *Validating automated assessments of teaching effectiveness using multimodal data*. Learning and Instruction, 101, 102264. https://doi.org/10.1016/j.learninstruc.2025.102264
+15. Andersen, J. F. (1979). *Teacher immediacy as a predictor of teaching effectiveness*. In D. Nimmo (Ed.), Communication Yearbook 3.
+16. Witt, P. L., Wheeless, L. R., & Allen, M. (2004). *A meta-analytical review of the relationship between teacher immediacy and student learning*. Communication Education, 53(2), 184-207.
+17. Liu, S., Zhang, J., Jensen, J., & Gao, Y. (2021). *Does Teacher Immediacy Affect Students? A Systematic Review*. Frontiers in Psychology, 12, 713978. https://www.frontiersin.org/articles/10.3389/fpsyg.2021.713978/full
+18. Ballester, L., et al. (2025). *Teacher nonverbal immediacy: a validation study of the TeNOI observation scale*. Scandinavian Journal of Educational Research. https://www.tandfonline.com/doi/full/10.1080/00313831.2025.2550273
+19. Rowe, M. B. (1986). *Wait Time: Slowing Down May Be a Way of Speeding Up!*. Journal of Teacher Education, 37(1). https://journals.sagepub.com/doi/10.1177/002248718603700110
+20. Tobin, K. (1987). *The Role of Wait Time in Higher Cognitive Level Learning*. Review of Educational Research, 57(1), 69-95.
+21. Stahl, R. J. (1994). *Using Think-Time and Wait-Time Skillfully in the Classroom*. ERIC ED370885. https://files.eric.ed.gov/fulltext/ED370885.pdf
+22. McIntyre, N. A., Mainhard, M. T., & Klassen, R. M. (2017). *Are you looking to teach? Cultural, temporal and dynamic features of expert teacher gaze*. Learning and Instruction, 49, 41-53. https://pmc.ncbi.nlm.nih.gov/articles/PMC8003357/
+23. Goldberg, P., et al. (2021). *Eye-Tracking in Educational Practice*. Educational Psychology Review, 33, 951-977. https://link.springer.com/article/10.1007/s10648-020-09565-7
+24. Ekman, P., & Friesen, W. V. (1978). *Facial Action Coding System*. Consulting Psychologists Press.
+25. Demszky, D., Liu, J., Hill, H. C., Jurafsky, D., & Piech, C. (2024). *Can Automated Feedback Improve Teachers' Uptake of Student Ideas?* Educational Evaluation and Policy Analysis. https://journals.sagepub.com/doi/10.3102/01623737231169270
+26. Zheng, J., et al. (2024). *I see you: teacher analytics with GPT-4 vision-powered observational assessment*. Smart Learning Environments, 11. https://slejournal.springeropen.com/articles/10.1186/s40561-024-00335-4
+27. Comanici, A., et al. (2025). *Gemini 2.5: Pushing the Frontier with Advanced Reasoning, Multimodality, Long Context, and Next-Generation Agentic Capabilities*. arXiv:2507.06261. https://arxiv.org/abs/2507.06261
+28. Google Developers Blog. (2025-05-09). *Advancing the frontier of video understanding with Gemini 2.5*. https://developers.googleblog.com/id/gemini-2-5-video-understanding/
+29. Nadaf, et al. (2025). *ClassMind: Scaling Classroom Observation and Instructional Feedback with Multimodal AI*. arXiv preprint. https://arxiv.org/abs/2509.18020
+30. Liu, Z., et al. (2025). *A Multi-Modal Dataset for Teacher Behavior Analysis in Offline Classrooms*. Scientific Data, 12. https://www.nature.com/articles/s41597-025-05426-6

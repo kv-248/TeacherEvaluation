@@ -32,7 +32,7 @@ export GEMINI_API_KEY="AIzaSyYourSecretKeyHere..."
 # On Windows PowerShell:
 $env:GEMINI_API_KEY="AIzaSyYourSecretKeyHere..."
 ```
-*(Tip: You can also create a `.env` file in the root of the repository containing `GEMINI_API_KEY=your_key` if you prefer).*
+*(Tip: for a stable "build once, run many times" workflow, create a `.env` file in the root of the repository containing `GEMINI_API_KEY=your_key`. The Docker runners now check for this before starting.)*
 
 ---
 
@@ -44,6 +44,11 @@ If you want a visual interface to explore existing processed runs or to trigger 
 Run this command from the root of the repository:
 ```bash
 docker compose up streamlit --build
+```
+
+If the image is already built and you have not changed dependencies or Docker-related files, you can reuse it without rebuilding:
+```bash
+docker compose up -d streamlit
 ```
 
 ### Access It
@@ -66,6 +71,40 @@ To automatically process a default batch of local clips (e.g., `crashcourse_moon
 ```bash
 docker compose run evaluator
 ```
+
+### Run the Sample Long-Form Evaluation Without Rebuilding
+
+Build once:
+```bash
+docker compose build streamlit
+docker compose up -d streamlit
+```
+
+Then reuse the same built image for repeated evaluation requests:
+```bash
+bash runner.sh
+```
+
+On Windows PowerShell, use:
+```powershell
+.\runner.ps1
+```
+
+Both runners write host-visible outputs under:
+`TeacherEvaluation/local_data/docker_test_outputs/`
+
+### Check Gemini Auth Before a Long Run
+
+If you want to confirm that the container not only sees a key but can actually call Gemini, run:
+
+```bash
+docker compose run --rm --no-deps --entrypoint python streamlit tools/check_gemini_auth.py
+```
+
+This distinguishes:
+- key missing
+- key present but rejected by the Gemini API
+- key valid, but the requested model is unavailable for that key/project
 
 ### Run Custom Batch
 To process specific target clips from your `clips/` folder, you can override the arguments passed to the python script:

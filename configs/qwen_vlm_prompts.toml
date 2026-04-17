@@ -2,8 +2,8 @@ version = "0.2.0"
 purpose = "Targeted VLM prompts used during semantic review and validation."
 
 [frame_semantic_review]
-model = "gemini-2.5-flash"
-temperature = 0.1
+model = "gemini-2.5-pro"
+temperature = 0.0
 max_new_tokens = 180
 prompt = """
 You are reviewing a single frame from a classroom lecture video.
@@ -15,5 +15,7 @@ Return JSON only with exactly these keys:
 - attention_note: short phrase, at most 12 words
 - evidence_confidence: one of [low, medium, high]
 - rationale: short phrase, at most 20 words
+Make attention_note and rationale specific to this frame, not generic.
+Use any supplied floor_x, floor_y, and pause_state only when they sharpen the visible interpretation.
 Do not add markdown or explanation outside the JSON object.
 """

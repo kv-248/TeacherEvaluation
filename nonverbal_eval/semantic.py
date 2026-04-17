@@ -11,7 +11,7 @@ import cv2
 import numpy as np
 import pandas as pd
 
-from .gemini_api import generate_gemini_json
+from .gemini_api import generate_gemini_json, sanitize_gemini_error_message
 from .pipeline import log_event
 from .runtime_config import load_qwen_prompt_config
 
@@ -22,8 +22,8 @@ _QWEN_CONFIG = load_qwen_prompt_config()["frame_semantic_review"]
 @dataclass(slots=True)
 class SemanticConfig:
     enabled: bool = False
-    sample_interval_sec: float = 6.0
-    max_samples: int = 8
+    sample_interval_sec: float = 5.0
+    max_samples: int = 10
     qwen_enabled: bool = True
     qwen_model: str = str(_QWEN_CONFIG["model"])
     qwen_max_new_tokens: int = int(_QWEN_CONFIG["max_new_tokens"])
@@ -47,6 +47,7 @@ class SemanticSample:
     image_path: Path
     frame_bgr: np.ndarray
     frame_shape: tuple[int, int, int]
+    context: dict[str, Any]
 
 
 QWEN_PROMPT = str(_QWEN_CONFIG["prompt"])
@@ -291,6 +292,8 @@ def _save_sampled_frames(
     for index, (timestamp_sec, reason) in enumerate(selections):
         frame_bgr = _extract_frame_at(clip_path, timestamp_sec)
         image_path = artifacts.sampled_frames_dir / f"frame_{index:02d}_{timestamp_sec:06.2f}s.jpg"
+        nearest_idx = (frame_metrics_df["timestamp_sec"] - timestamp_sec).abs().idxmin()
+        row = frame_metrics_df.loc[nearest_idx]
         cv2.imwrite(str(image_path), frame_bgr)
         samples.append(
             SemanticSample(
@@ -299,6 +302,11 @@ def _save_sampled_frames(
                 image_path=image_path,
                 frame_bgr=frame_bgr,
                 frame_shape=frame_bgr.shape,
+                context={
+                    "floor_x": None if pd.isna(row.get("floor_x")) else round(float(row["floor_x"]), 3),
+                    "floor_y": None if pd.isna(row.get("floor_y")) else round(float(row["floor_y"]), 3),
+                    "pause_state": str(row.get("pause_state", "moving")),
+                },
             )
         )
     log_event(
@@ -330,6 +338,13 @@ def _run_qwen(
     annotations: list[dict[str, Any]] = []
     try:
         for sample in samples:
+            context_lines = [
+                f"- timestamp_sec: {sample.timestamp_sec:.2f}",
+                f"- sample_reason: {sample.reason}",
+                f"- floor_x: {sample.context.get('floor_x', 'n/a')}",
+                f"- floor_y: {sample.context.get('floor_y', 'n/a')}",
+                f"- pause_state: {sample.context.get('pause_state', 'moving')}",
+            ]
             parsed, raw_text = generate_gemini_json(
                 model_name=config.qwen_model,
                 system_instruction=(
@@ -337,16 +352,25 @@ def _run_qwen(
                     "Return only the JSON object that matches the schema. "
                     "Use only the allowed enum values for categorical fields."
                 ),
-                user_text=QWEN_PROMPT,
+                user_text=QWEN_PROMPT
+                + "\n\nFrame context:\n"
+                + "\n".join(context_lines)
+                + "\nUse the image as primary evidence and the context only as supporting metadata.",
                 image_paths=[sample.image_path],
-                max_output_tokens=max(int(config.qwen_max_new_tokens), 192),
+                max_output_tokens=max(int(config.qwen_max_new_tokens), 1024),
                 temperature=0.0,
                 response_json_schema=_gemini_annotation_schema(),
+                request_metadata_recorder=lambda payload, ts=sample.timestamp_sec: log_event(
+                    events_path,
+                    "semantic_gemini_request",
+                    timestamp_sec=round(ts, 2),
+                    **payload,
+                ),
             )
             annotations.append(_build_qwen_annotation(sample, parsed, raw_text))
     except Exception as exc:
         result["status"] = "failed"
-        result["reason"] = f"Gemini semantic inference failed: {type(exc).__name__}: {exc}"
+        result["reason"] = f"Semantic review unavailable: {sanitize_gemini_error_message(exc)}"
         return result
 
     focus_counts = pd.Series([row["teacher_focus"] for row in annotations]).value_counts().to_dict()
@@ -365,6 +389,7 @@ def _run_qwen(
         "pointing_ratio": _safe_ratio(
             action_counts.get("pointing_board", 0) + action_counts.get("pointing_screen", 0), annotation_count
         ),
+        "reading_from_notes_ratio": _safe_ratio(action_counts.get("reading_from_notes", 0), annotation_count),
         "writing_ratio": _safe_ratio(action_counts.get("writing_board", 0), annotation_count),
         "warm_affect_ratio": _safe_ratio(affect_counts.get("warm", 0), annotation_count),
         "tense_affect_ratio": _safe_ratio(affect_counts.get("tense", 0), annotation_count),

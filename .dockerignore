@@ -1,0 +1,15 @@
+.git
+.venv
+.env
+__pycache__
+artifacts
+datasets
+clips
+samples
+.codex
+local_data
+evaluation/local_data
+evaluation/runtime_batches
+TeacherEvaluation/local_data
+testaudio
+**/__pycache__

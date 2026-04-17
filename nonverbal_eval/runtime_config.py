@@ -9,6 +9,7 @@ from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 CONFIG_DIR = REPO_ROOT / "configs"
+DEFAULT_GEMINI_MODEL = "gemini-2.5-pro"
 
 
 DEFAULT_BASE_THRESHOLDS: dict[str, Any] = {
@@ -26,6 +27,27 @@ DEFAULT_BASE_THRESHOLDS: dict[str, Any] = {
     "risk_bands": {
         "high_min": 65.0,
         "moderate_min": 35.0,
+    },
+    "pause": {
+        "min_duration_sec": 0.8,
+        "dramatic_max_sec": 3.0,
+        "static_min_sec": 3.0,
+        "merge_gap_sec": 0.4,
+        "normalized_motion_floor": 0.01,
+        "dramatic_preferred_sec": 1.8,
+    },
+    "expressiveness": {
+        "rolling_window_sec": 5.0,
+        "flatness_std": 0.015,
+        "flatness_coverage_pct": 50.0,
+    },
+    "proxemics": {
+        "zone_edges": [0.33, 0.66],
+        "static_dwell_pct": 60.0,
+        "coverage_good_pct": 50.0,
+        "grid_cols": 6,
+        "grid_rows": 4,
+        "lower_body_coverage_min": 0.35,
     },
     "feedback_strengths": {
         "natural_movement_min": 70.0,
@@ -75,6 +97,11 @@ DEFAULT_BASE_THRESHOLDS: dict[str, Any] = {
             "score_duration_sec_min": 45.0,
             "high_score_min": 4,
             "medium_score_min": 2,
+            "hard_low_face_max": 0.55,
+            "hard_low_combo_face_max": 0.70,
+            "hard_low_combo_hand_max": 0.60,
+            "cap_high_face_max": 0.88,
+            "cap_high_hand_max": 0.75,
         },
         "candidate_thresholds": {
             "eye_contact_action_max": 68.0,
@@ -85,16 +112,32 @@ DEFAULT_BASE_THRESHOLDS: dict[str, Any] = {
         },
         "window_tags": {
             "face_coverage_low_max": 0.85,
+            "affect_face_coverage_min": 0.90,
             "eye_distribution_low_max": 55.0,
             "audience_orientation_low_max": 55.0,
+            "board_context_audience_orientation_max": 45.0,
+            "board_context_face_coverage_max": 0.50,
+            "board_context_board_focus_min": 0.55,
+            "board_context_writing_ratio_min": 0.40,
+            "board_context_note_window_ratio_min": 0.34,
             "presence_low_max": 60.0,
             "closed_posture_risk_min": 35.0,
             "natural_movement_low_max": 45.0,
             "static_behavior_risk_min": 35.0,
-            "excessive_animation_risk_min": 50.0,
+            "excessive_animation_risk_min": 65.0,
+            "excessive_animation_risk_high_min": 88.0,
+            "over_animation_peak_min": 5.0,
+            "over_animation_peak_high_min": 11.0,
+            "over_animation_std_min": 0.55,
+            "over_animation_std_high_min": 1.15,
+            "over_animation_extent_min": 3.2,
+            "over_animation_extent_high_min": 4.6,
+            "over_animation_hand_coverage_min": 0.45,
             "positive_affect_low_max": 50.0,
             "tension_hostility_risk_min": 35.0,
             "alertness_low_max": 60.0,
+            "stage_anchor_static_min": 60.0,
+            "sweep_rate_low_max": 2.0,
             "strength_eye_distribution_min": 70.0,
             "strength_presence_min": 75.0,
             "strength_posture_min": 75.0,
@@ -102,6 +145,8 @@ DEFAULT_BASE_THRESHOLDS: dict[str, Any] = {
             "strength_excessive_animation_max": 35.0,
             "strength_positive_affect_min": 55.0,
             "strength_alertness_min": 75.0,
+            "strength_stage_coverage_min": 35.0,
+            "strength_sweep_rate_min": 3.0,
         },
         "report_shape": {
             "material_clip_min_sec": 20.0,
@@ -110,6 +155,10 @@ DEFAULT_BASE_THRESHOLDS: dict[str, Any] = {
             "single_window_material_clip_min_sec": 45.0,
             "single_window_material_severity_min": 72.0,
             "watchlist_severity_min": 30.0,
+            "maintenance_overall_min": 55.0,
+            "maintenance_presence_min": 75.0,
+            "maintenance_eye_distribution_min": 70.0,
+            "maintenance_alertness_min": 75.0,
             "top_strength_priority_min": 72.0,
             "strength_inventory_min_priority": 60.0,
             "top_strength_limit": 4,
@@ -124,8 +173,8 @@ DEFAULT_BASE_THRESHOLDS: dict[str, Any] = {
 DEFAULT_QWEN_PROMPTS: dict[str, Any] = {
     "version": "0.2.0",
     "frame_semantic_review": {
-        "model": "gemini-2.5-flash",
-        "temperature": 0.1,
+        "model": DEFAULT_GEMINI_MODEL,
+        "temperature": 0.0,
         "max_new_tokens": 180,
         "prompt": (
             "You are reviewing a single frame from a classroom lecture video.\n"
@@ -137,6 +186,8 @@ DEFAULT_QWEN_PROMPTS: dict[str, Any] = {
             "- attention_note: short phrase, at most 12 words\n"
             "- evidence_confidence: one of [low, medium, high]\n"
             "- rationale: short phrase, at most 20 words\n"
+            "Make attention_note and rationale specific to this frame, not generic.\n"
+            "Use any supplied floor_x, floor_y, and pause_state only when they sharpen the visible interpretation.\n"
             "Do not add markdown or explanation outside the JSON object."
         ),
     },
@@ -146,13 +197,14 @@ DEFAULT_QWEN_PROMPTS: dict[str, Any] = {
 DEFAULT_COACHING_PROMPTS: dict[str, Any] = {
     "version": "0.3.0",
     "coaching_synthesis": {
-        "model": "gemini-2.5-flash",
+        "model": DEFAULT_GEMINI_MODEL,
         "fallback": "template",
         "prompt": (
             "You are a teacher coach writing concise, practical feedback from structured nonverbal evidence.\n"
             "Return JSON only with exactly these top-level keys:\n"
             "- report_shape_version: string\n"
             "- executive_summary: string, max 85 words\n"
+            "- scorecard: optional object with keys [overall_score, verdict, badges]\n"
             "- no_material_intervention_needed: boolean\n"
             "- no_material_intervention_needed_reason: string\n"
             "- top_strengths: array of objects with keys [title, evidence, what_to_repeat, timestamps, confidence]\n"
@@ -163,7 +215,7 @@ DEFAULT_COACHING_PROMPTS: dict[str, Any] = {
             "- keep_doing: array of short strings\n"
             "- watch_for: array of short strings\n"
             "- confidence_notes: array of short strings\n"
-            "- evidence_moments: array of objects with keys [timestamp, headline, observed_behavior, metric_evidence, qwen_interpretation, coaching_implication]\n\n"
+            "- evidence_moments: array of objects with keys [timestamp, headline, observed_behavior, metric_evidence, semantic_interpretation, coaching_implication]\n\n"
             "Requirements:\n"
             "- Use only the evidence provided by the user message.\n"
             "- Every priority action, strength, inventory item, and watch item must cite one or more timestamps already present in the evidence.\n"
@@ -172,7 +224,15 @@ DEFAULT_COACHING_PROMPTS: dict[str, Any] = {
             "- If the evidence does not justify real corrective feedback, set no_material_intervention_needed=true, leave priority_actions empty, explain why, and move the weaker items into low_confidence_watchlist or strength_inventory.\n"
             "- Make strengths concrete and repeatable; do not use abstract titles without a visible behavior and a cited moment.\n"
             "- Use additional_observation_inventory to list important observations not already surfaced in priority_actions.\n"
+            "- Do not place the same title or cue in both strengths and watch/action sections.\n"
+            "- Do not repeat the same title across priority_actions, additional_observation_inventory, and low_confidence_watchlist.\n"
             "- If the evidence is weak, say so in confidence_notes instead of inventing certainty.\n"
+            "- Each evidence_moment should capture a distinct timestamped pattern; avoid repeating the same semantic sentence across multiple windows.\n"
+            "- If facial_expressiveness.facial_flatness_flag is true, include a concrete expressiveness drill.\n"
+            "- If movement_presence.static_zone_time_pct is above 60, recommend a specific stage transition.\n"
+            "- If gaze_dynamics.sweep_rate_per_min is below 2, recommend a deliberate gaze-sweep cue.\n"
+            "- If a review window has board_context=true, avoid using it for eye-contact, facial-affect, or over-animation corrections.\n"
+            "- Use movement_presence, facial_expressiveness, and gaze_dynamics when they materially sharpen the advice.\n"
             "- Prefer concrete next-lecture experiments over generic advice.\n"
             "Do not add markdown or explanation outside the JSON object."
         ),
@@ -226,6 +286,24 @@ DEFAULT_COACHING_PROMPTS: dict[str, Any] = {
             "try": "Build in quick audience checks after transitions instead of staying fixed on notes or a single spot.",
             "monitor": "Check whether transitions now include a visible room check before the next explanation.",
         },
+        "static_stage_anchor": {
+            "title": "Break the static stage anchor",
+            "why": "Staying rooted in one part of the room for too long can narrow your physical presence and make transitions feel flatter.",
+            "try": "Pair each new section or example with one deliberate step to a new room zone before settling again.",
+            "monitor": "Check whether the next recording shows at least one clear stage transition between major points.",
+        },
+        "low_gaze_sweep": {
+            "title": "Increase eye-contact sweep rate",
+            "why": "A deliberate left-center-right sweep helps attention feel more evenly distributed across the room.",
+            "try": "At each major transition, pause briefly and sweep your attention across at least two room sectors before continuing.",
+            "monitor": "Check whether long fixations shorten and the next explanation visibly reaches more than one room sector.",
+        },
+        "flat_facial_expressiveness": {
+            "title": "Add more facial expressive range",
+            "why": "A very flat facial pattern can make explanation beats feel less warm or less clearly emphasized.",
+            "try": "Practice one contrastive explanation with a small brow lift, clearer mouth opening, and a visible reset between sentences.",
+            "monitor": "Check whether the face shows more natural variation at emphasis points instead of staying uniformly flat.",
+        },
     },
     "strength_templates": {
         "distributed_room_engagement": {
@@ -257,6 +335,26 @@ DEFAULT_COACHING_PROMPTS: dict[str, Any] = {
             "title": "Open-palm explanatory delivery",
             "evidence": "Semantic review repeatedly identified open-palm explaining rather than closed or static action.",
             "repeat": "Keep the same open-palm gesture shape when emphasizing key ideas.",
+        },
+        "room_mobility_range": {
+            "title": "Purposeful room coverage",
+            "evidence": "Stage movement covered more than one room zone without looking restless.",
+            "repeat": "Keep using small location changes to mark transitions between major ideas.",
+        },
+        "balanced_gaze_sweep": {
+            "title": "Balanced gaze sweep",
+            "evidence": "Attention moves across the room with a healthy sweep pattern rather than locking on one sector.",
+            "repeat": "Reuse the same left-center-right scan during transitions and emphasis points.",
+        },
+        "purposeful_pause_control": {
+            "title": "Purposeful pause control",
+            "evidence": "Stillness appears intentional and brief rather than frozen or over-held.",
+            "repeat": "Keep using short settled pauses to punctuate key points before moving again.",
+        },
+        "expressive_range": {
+            "title": "Visible expressive range",
+            "evidence": "Facial variation shows natural emphasis rather than a uniformly flat expression.",
+            "repeat": "Keep the same small visible facial changes that help emphasis land without exaggeration.",
         },
     },
 }

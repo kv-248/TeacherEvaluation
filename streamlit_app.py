@@ -4,7 +4,6 @@ import json
 import os
 import shutil
 import tempfile
-from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -12,6 +11,7 @@ import cv2
 import streamlit as st
 
 from nonverbal_eval.app_service import run_teacher_evaluation
+from nonverbal_eval.runtime_config import DEFAULT_GEMINI_MODEL
 
 
 APP_TITLE = "TeacherEvaluation"
@@ -84,7 +84,7 @@ def _load_json(path: str | Path | None) -> dict[str, Any] | None:
     return json.loads(file_path.read_text(encoding="utf-8"))
 
 
-def _semantic_model_name(default: str = "gemini-2.5-flash") -> str:
+def _semantic_model_name(default: str = DEFAULT_GEMINI_MODEL) -> str:
     return (
         os.getenv(SEMANTIC_MODEL_ENV)
         or os.getenv(LEGACY_SEMANTIC_MODEL_ENV)
@@ -101,23 +101,68 @@ def _as_timestamps(value: Any) -> list[str]:
 
 
 def _build_markdown_report(report: dict[str, Any]) -> str:
-    lines = [
-        "# Teacher Coaching Brief",
-        "",
-        "## At a Glance",
-        "",
-        str(report.get("executive_summary", "")).strip() or "No executive summary was generated.",
-        "",
-        "## No Material Intervention Needed",
-        "",
-        f"- Enabled: `{bool(report.get('no_material_intervention_needed'))}`",
-    ]
+    source = report.get("source", {})
+    scorecard = report.get("scorecard", {})
+    strengths: list[dict[str, Any]] = []
+    seen_titles: set[str] = set()
+    for item in [*report.get("top_strengths", []), *report.get("strength_inventory", [])]:
+        title = str(item.get("title", "")).strip()
+        if not title or title in seen_titles:
+            continue
+        seen_titles.add(title)
+        strengths.append(item)
+
+    watch_items: list[dict[str, Any]] = []
+    for item in report.get("additional_observation_inventory", []):
+        watch_items.append(
+            {
+                "title": item.get("title", "Observation"),
+                "why_watch": item.get("evidence", ""),
+                "what_we_saw": item.get("evidence", ""),
+                "what_to_monitor_next": item.get("suggested_response", ""),
+                "timestamps": item.get("timestamps", []),
+                "confidence": item.get("confidence", "medium"),
+            }
+        )
+    watch_items.extend(report.get("low_confidence_watchlist", []))
+
+    lines = ["# Teacher Coaching Brief", ""]
+    if str(source.get("mode", "")).startswith("template_fallback"):
+        lines.extend(["> LLM unavailable - showing template fallback.", ""])
+
+    lines.extend(["## Scorecard", ""])
+    if isinstance(scorecard, dict) and scorecard:
+        lines.append(f"- Overall nonverbal score: `{float(scorecard.get('overall_score', 0.0)):.1f}`")
+        verdict = str(scorecard.get("verdict", "")).strip()
+        if verdict:
+            lines.append(f"- Verdict: {verdict}")
+        badges = scorecard.get("badges", [])
+        if badges:
+            lines.extend(["", "| Area | Score |", "| --- | ---: |"])
+            for item in badges[:5]:
+                lines.append(f"| {item.get('label', 'Area')} | {float(item.get('score', 0.0)):.1f} |")
+    else:
+        lines.append("- Scorecard unavailable.")
+
+    lines.extend(
+        [
+            "",
+            "## At a Glance",
+            "",
+            str(report.get("executive_summary", "")).strip() or "No executive summary was generated.",
+            "",
+            "## No Material Intervention Needed",
+            "",
+            f"- Enabled: `{bool(report.get('no_material_intervention_needed'))}`",
+        ]
+    )
     reason = str(report.get("no_material_intervention_needed_reason", "")).strip()
     if reason:
         lines.append(f"- Reason: {reason}")
 
-    lines.extend(["", "## Top 3 Actions for the Next Lecture", ""])
     actions = report.get("priority_actions", [])
+    action_count = len(actions[:3])
+    lines.extend(["", f"## {'Top Action' if action_count == 1 else f'Top {max(action_count, 1)} Actions'}", ""])
     if actions:
         for index, action in enumerate(actions[:3], start=1):
             timestamps = ", ".join(_as_timestamps(action.get("timestamps")))
@@ -136,59 +181,27 @@ def _build_markdown_report(report: dict[str, Any]) -> str:
     else:
         lines.append("- No priority actions were generated for this run.")
 
-    lines.extend(["## Strengths to Preserve", ""])
-    for item in report.get("top_strengths", []):
-        timestamps = ", ".join(_as_timestamps(item.get("timestamps")))
-        lines.extend(
-            [
-                f"### {item.get('title', 'Untitled strength')}",
-                "",
-                f"- Evidence: {item.get('evidence', '')}",
-                f"- What to repeat: {item.get('what_to_repeat', '')}",
-                f"- Review at: {timestamps or 'n/a'}",
-                f"- Confidence: {item.get('confidence', 'n/a')}",
-                "",
-            ]
-        )
-
-    lines.extend(["## Strength Inventory", ""])
-    if report.get("strength_inventory"):
-        for item in report["strength_inventory"]:
+    lines.extend(["## Strengths", ""])
+    if strengths:
+        for item in strengths:
             timestamps = ", ".join(_as_timestamps(item.get("timestamps")))
             lines.extend(
                 [
-                    f"- **{item.get('title', 'Untitled strength')}**: {item.get('evidence', '')}",
-                    f"  - What to repeat: {item.get('what_to_repeat', '')}",
-                    f"  - Review at: {timestamps or 'n/a'}",
-                    f"  - Confidence: {item.get('confidence', 'n/a')}",
+                    f"### {item.get('title', 'Untitled strength')}",
                     "",
-                ]
-            )
-    else:
-        lines.append("- No additional strength inventory was generated.")
-
-    lines.extend(["## Additional Observation Inventory", ""])
-    if report.get("additional_observation_inventory"):
-        for item in report["additional_observation_inventory"]:
-            timestamps = ", ".join(_as_timestamps(item.get("timestamps")))
-            lines.extend(
-                [
-                    f"### {item.get('title', 'Untitled observation')}",
-                    "",
-                    f"- Kind: {item.get('kind', 'observation')}",
                     f"- Evidence: {item.get('evidence', '')}",
-                    f"- Suggested response: {item.get('suggested_response', '')}",
+                    f"- What to repeat: {item.get('what_to_repeat', '')}",
                     f"- Review at: {timestamps or 'n/a'}",
                     f"- Confidence: {item.get('confidence', 'n/a')}",
                     "",
                 ]
             )
     else:
-        lines.append("- No additional observation inventory was generated.")
+        lines.append("- No dominant strengths were generated for this run.")
 
-    lines.extend(["## Low-Confidence Watchlist", ""])
-    if report.get("low_confidence_watchlist"):
-        for item in report["low_confidence_watchlist"]:
+    lines.extend(["## Watch Items (low confidence)", ""])
+    if watch_items:
+        for item in watch_items:
             timestamps = ", ".join(_as_timestamps(item.get("timestamps")))
             lines.extend(
                 [
@@ -203,7 +216,7 @@ def _build_markdown_report(report: dict[str, Any]) -> str:
                 ]
             )
     else:
-        lines.append("- No low-confidence watchlist items were generated.")
+        lines.append("- No low-confidence watch items were generated.")
 
     if report.get("evidence_moments"):
         lines.extend(["## Moment-by-Moment Evidence", ""])
@@ -214,7 +227,7 @@ def _build_markdown_report(report: dict[str, Any]) -> str:
                     "",
                     f"- Observed behavior: {moment.get('observed_behavior', '')}",
                     f"- Metric evidence: {moment.get('metric_evidence', '')}",
-                    f"- Semantic interpretation: {moment.get('qwen_interpretation', '')}",
+                    f"- Semantic interpretation: {moment.get('semantic_interpretation') or moment.get('qwen_interpretation', '')}",
                     f"- Coaching implication: {moment.get('coaching_implication', '')}",
                     "",
                 ]
@@ -225,10 +238,34 @@ def _build_markdown_report(report: dict[str, Any]) -> str:
         for note in report["confidence_notes"]:
             lines.append(f"- {note}")
 
+    lines.extend(
+        [
+            "",
+            "## Report Provenance",
+            "",
+            f"- Source mode: `{source.get('mode', 'unknown')}`",
+            f"- Model: `{source.get('model') or 'n/a'}`",
+        ]
+    )
+
     return "\n".join(lines).strip() + "\n"
 
 
 def _render_downloads_from_report(report: dict[str, Any]) -> None:
+    st.download_button(
+        "Download JSON",
+        data=json.dumps(report, indent=2, ensure_ascii=True),
+        file_name="teacher_coaching_report.json",
+        mime="application/json",
+        use_container_width=True,
+    )
+    st.download_button(
+        "Download Markdown",
+        data=_build_markdown_report(report),
+        file_name="teacher_coaching_report.md",
+        mime="text/markdown",
+        use_container_width=True,
+    )
     pdf_path = report.get("_qa_pdf_path")
 
     if pdf_path and Path(str(pdf_path)).exists():
@@ -245,7 +282,26 @@ def _render_downloads_from_report(report: dict[str, Any]) -> None:
 
 
 def _report_downloads(report_artifacts: dict[str, Any]) -> None:
+    report_json_path = Path(report_artifacts["report_json"])
+    report_md_path = Path(report_artifacts["report_md"])
     pdf_path = Path(report_artifacts["report_pdf"])
+
+    if report_json_path.exists():
+        st.download_button(
+            "Download JSON",
+            data=report_json_path.read_text(encoding="utf-8"),
+            file_name=report_json_path.name,
+            mime="application/json",
+            use_container_width=True,
+        )
+    if report_md_path.exists():
+        st.download_button(
+            "Download Markdown",
+            data=report_md_path.read_text(encoding="utf-8"),
+            file_name=report_md_path.name,
+            mime="text/markdown",
+            use_container_width=True,
+        )
 
     if pdf_path.exists():
         st.download_button(
@@ -259,8 +315,35 @@ def _report_downloads(report_artifacts: dict[str, Any]) -> None:
         st.button("PDF unavailable", disabled=True, use_container_width=True)
 
 
+def _render_scorecard(report: dict[str, Any], summary: dict[str, Any] | None = None) -> None:
+    scorecard = report.get("scorecard", {})
+    if not scorecard and summary is not None:
+        scorecard = {
+            "overall_score": summary["heuristic_nonverbal_score"],
+            "verdict": "See the detailed coaching sections below.",
+            "badges": [
+                {"label": "Posture", "score": summary["posture_stability_score"]},
+                {"label": "Eye-contact distribution", "score": summary["eye_contact_distribution_score"]},
+                {"label": "Gesture smoothness", "score": summary["gesture_smoothness_score"]},
+                {"label": "Positive affect", "score": summary["positive_affect_score"]},
+                {"label": "Stage usage", "score": summary.get("stage_usage_score", 0.0)},
+            ],
+        }
+    cols = st.columns([1.1, 2.2])
+    with cols[0]:
+        st.metric("Overall Nonverbal Score", f"{float(scorecard.get('overall_score', 0.0)):.1f}")
+    with cols[1]:
+        verdict = str(scorecard.get("verdict", "")).strip()
+        if verdict:
+            st.write(verdict)
+        badges = scorecard.get("badges", [])
+        if badges:
+            st.caption(" | ".join(f"{item.get('label')}: {float(item.get('score', 0.0)):.1f}" for item in badges[:5]))
+
+
 def _render_priority_actions(report: dict[str, Any]) -> None:
-    st.subheader("Top 3 Actions for the Next Lecture")
+    action_count = len(report.get("priority_actions", [])[:3])
+    st.subheader("Top Action" if action_count == 1 else f"Top {max(action_count, 1)} Actions")
     actions = report.get("priority_actions", [])
     if not actions:
         st.info("No priority actions were generated for this run.")
@@ -278,8 +361,15 @@ def _render_priority_actions(report: dict[str, Any]) -> None:
 
 
 def _render_strengths(report: dict[str, Any]) -> None:
-    st.subheader("Strengths to Preserve")
-    strengths = report.get("top_strengths", [])
+    st.subheader("Strengths")
+    strengths = []
+    seen_titles: set[str] = set()
+    for item in [*report.get("top_strengths", []), *report.get("strength_inventory", [])]:
+        title = str(item.get("title", "")).strip()
+        if not title or title in seen_titles:
+            continue
+        seen_titles.add(title)
+        strengths.append(item)
     if not strengths:
         st.info("No dominant strength signals were extracted for this run.")
         return
@@ -304,47 +394,21 @@ def _render_no_material_intervention(report: dict[str, Any]) -> None:
     else:
         st.write("This report still recommends follow-up coaching actions.")
 
-
-def _render_strength_inventory(report: dict[str, Any]) -> None:
-    st.subheader("Strength Inventory")
-    strengths = report.get("strength_inventory", [])
-    if not strengths:
-        st.info("No broader strength inventory was generated for this run.")
-        return
-    for item in strengths:
-        timestamps = _as_timestamps(item.get("timestamps"))
-        with st.container(border=True):
-            st.markdown(f"**{item.get('title', 'Untitled strength')}**")
-            st.write(item.get("evidence", ""))
-            st.caption(
-                f"Review at: {', '.join(timestamps) if timestamps else 'n/a'} | "
-                f"Confidence: {item.get('confidence', 'n/a')}"
-            )
-            st.markdown(f"**What to repeat:** {item.get('what_to_repeat', '')}")
-
-
-def _render_additional_observation_inventory(report: dict[str, Any]) -> None:
-    st.subheader("Additional Observation Inventory")
-    items = report.get("additional_observation_inventory", [])
-    if not items:
-        st.info("No additional observations were surfaced for this run.")
-        return
-    for item in items:
-        timestamps = _as_timestamps(item.get("timestamps"))
-        with st.container(border=True):
-            st.markdown(f"**{item.get('title', 'Untitled observation')}**")
-            st.caption(
-                f"Kind: {item.get('kind', 'observation')} | "
-                f"Review at: {', '.join(timestamps) if timestamps else 'n/a'} | "
-                f"Confidence: {item.get('confidence', 'n/a')}"
-            )
-            st.markdown(f"**Evidence:** {item.get('evidence', '')}")
-            st.markdown(f"**Suggested response:** {item.get('suggested_response', '')}")
-
-
 def _render_watchlist(report: dict[str, Any]) -> None:
-    st.subheader("Low-Confidence Watchlist")
-    items = report.get("low_confidence_watchlist", [])
+    st.subheader("Watch Items (low confidence)")
+    items = []
+    for item in report.get("additional_observation_inventory", []):
+        items.append(
+            {
+                "title": item.get("title", "Observation"),
+                "why_watch": item.get("evidence", ""),
+                "what_we_saw": item.get("evidence", ""),
+                "what_to_monitor_next": item.get("suggested_response", ""),
+                "timestamps": item.get("timestamps", []),
+                "confidence": item.get("confidence", "medium"),
+            }
+        )
+    items.extend(report.get("low_confidence_watchlist", []))
     if not items:
         st.info("No watchlist items were generated for this run.")
         return
@@ -381,7 +445,8 @@ def _render_moments(report: dict[str, Any]) -> None:
             st.markdown(f"**{moment['timestamp']} — {moment['headline']}**")
             st.markdown(f"- Observed: {moment['observed_behavior']}")
             st.markdown(f"- Metrics: {moment['metric_evidence']}")
-            st.markdown(f"- Interpretation: {_clean_interpretation(moment['qwen_interpretation'])}")
+            interpretation = moment.get("semantic_interpretation") or moment.get("qwen_interpretation", "")
+            st.markdown(f"- Interpretation: {_clean_interpretation(str(interpretation))}")
             st.markdown(f"- Take-away: {moment['coaching_implication']}")
 
 
@@ -418,13 +483,13 @@ def main() -> None:
     qa_report = _load_qa_report()
     if qa_report is not None:
         st.sidebar.info("QA fixture mode is active.")
+        st.subheader("Scorecard")
+        _render_scorecard(qa_report)
         st.subheader("At a Glance")
         st.write(qa_report.get("executive_summary", "No executive summary was generated."))
         _render_no_material_intervention(qa_report)
         _render_priority_actions(qa_report)
         _render_strengths(qa_report)
-        _render_strength_inventory(qa_report)
-        _render_additional_observation_inventory(qa_report)
         _render_watchlist(qa_report)
         _render_moments(qa_report)
         st.subheader("Downloads")
@@ -492,7 +557,7 @@ def main() -> None:
             disable_qwen=False,
             qwen_model=_semantic_model_name(),
             enable_coaching=True,
-            coach_model=os.getenv(COACH_MODEL_ENV, "gemini-2.5-flash"),
+            coach_model=os.getenv(COACH_MODEL_ENV, DEFAULT_GEMINI_MODEL),
             coach_top_actions=3,
             coach_fallback_template_only=False,
             progress_callback=progress_callback,
@@ -515,20 +580,20 @@ def main() -> None:
     summary = results["summary"]["scores"]
     qc = results["summary"]["quality_control"]
 
+    st.subheader("Scorecard")
+    _render_scorecard(report, summary)
     st.subheader("At a Glance")
     st.write(report["executive_summary"])
     st.caption(
         f"Overall score: {summary['heuristic_nonverbal_score']:.1f} | "
+        f"Stage usage: {summary['stage_usage_score']:.1f} | "
         f"Eye-contact distribution: {summary['eye_contact_distribution_score']:.1f} | "
-        f"Confidence/presence: {summary['confidence_presence_score']:.1f} | "
         f"Face coverage: {qc['face_coverage']:.2f}"
     )
 
     _render_no_material_intervention(report)
     _render_priority_actions(report)
     _render_strengths(report)
-    _render_strength_inventory(report)
-    _render_additional_observation_inventory(report)
     _render_watchlist(report)
     _render_moments(report)
 

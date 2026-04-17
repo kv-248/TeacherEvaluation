@@ -11,6 +11,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -43,9 +44,29 @@ def get_gemini_api_key() -> str | None:
     return None
 
 
-def _supports_thinking_budget_zero(model_name: str) -> bool:
+def _thinking_config_for(model_name: str) -> dict[str, int] | None:
     model = normalize_gemini_model_name(model_name)
-    return model.startswith("gemini-2.5-flash")
+    if model.startswith("gemini-2.5-flash"):
+        return {"thinkingBudget": 0}
+    if model.startswith("gemini-2.5-pro"):
+        return {"thinkingBudget": -1}
+    return None
+
+
+def sanitize_gemini_error_message(value: Any) -> str:
+    text = re.sub(r"\s+", " ", str(value or "")).strip()
+    lowered = text.lower()
+    if any(marker in lowered for marker in ("quota exceeded", "resource_exhausted", "rate limit", "http 429")):
+        return "quota exceeded"
+    if any(marker in lowered for marker in ("api key", "permission denied", "unauthorized", "http 401", "http 403")):
+        return "authentication failed"
+    if any(marker in lowered for marker in ("backend unavailable", "service unavailable", "temporarily unavailable", "http 500", "http 502", "http 503", "http 504")):
+        return "service unavailable"
+    if any(marker in lowered for marker in ("timed out", "timeout")):
+        return "request timed out"
+    if any(marker in lowered for marker in ("network is unreachable", "connection refused", "connection reset", "request failed")):
+        return "request failed"
+    return "request failed"
 
 
 def _image_part(image_path: Path) -> dict[str, Any]:
@@ -272,6 +293,7 @@ def generate_gemini_json(
     temperature: float,
     response_json_schema: dict[str, Any] | None = None,
     timeout_sec: int = 180,
+    request_metadata_recorder: Callable[[dict[str, Any]], None] | None = None,
 ) -> tuple[dict[str, Any], str]:
     api_key = get_gemini_api_key()
     if not api_key:
@@ -285,6 +307,7 @@ def generate_gemini_json(
         parts.append(_image_part(image_path))
 
     def _request(current_system_instruction: str, current_temperature: float) -> tuple[dict[str, Any], str]:
+        thinking_config = _thinking_config_for(model)
         payload: dict[str, Any] = {
             "systemInstruction": {
                 "parts": [{"text": current_system_instruction}],
@@ -302,8 +325,19 @@ def generate_gemini_json(
         }
         if response_json_schema is not None:
             payload["generationConfig"]["responseJsonSchema"] = response_json_schema
-        if _supports_thinking_budget_zero(model):
-            payload["generationConfig"]["thinkingConfig"] = {"thinkingBudget": 0}
+        if thinking_config is not None:
+            payload["generationConfig"]["thinkingConfig"] = thinking_config
+        if request_metadata_recorder is not None:
+            request_metadata_recorder(
+                {
+                    "model": model,
+                    "thinking_config": thinking_config,
+                    "temperature": float(current_temperature),
+                    "max_output_tokens": int(max_output_tokens),
+                    "image_count": len(image_paths or []),
+                    "has_schema": response_json_schema is not None,
+                }
+            )
 
         request = urllib.request.Request(
             url,
@@ -324,7 +358,7 @@ def generate_gemini_json(
                 body = exc.read().decode("utf-8", errors="replace")
                 retryable = _is_retryable_http_error(exc, body)
                 if not retryable or attempt >= _MAX_RETRIES:
-                    raise RuntimeError(f"Gemini API HTTP {exc.code}: {body}") from exc
+                    raise RuntimeError(f"Gemini API HTTP {exc.code}: {sanitize_gemini_error_message(body)}") from exc
                 delay = _backoff_delay(attempt, _transient_http_retry_after(exc))
                 last_error = RuntimeError(
                     f"Gemini API transient HTTP {exc.code}; retry {attempt + 1}/{_MAX_RETRIES} in {delay:.1f}s"
@@ -333,7 +367,7 @@ def generate_gemini_json(
             except urllib.error.URLError as exc:
                 retryable = _is_retryable_url_error(exc)
                 if not retryable or attempt >= _MAX_RETRIES:
-                    raise RuntimeError(f"Gemini API request failed: {exc.reason}") from exc
+                    raise RuntimeError(f"Gemini API request failed: {sanitize_gemini_error_message(exc.reason)}") from exc
                 delay = _backoff_delay(attempt)
                 last_error = RuntimeError(
                     f"Gemini API transient request error; retry {attempt + 1}/{_MAX_RETRIES} in {delay:.1f}s: {exc.reason}"

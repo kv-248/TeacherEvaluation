@@ -3,7 +3,33 @@
     "mode": "template_fallback",
     "model": null
   },
-  "report_shape_version": 2,
+  "report_shape_version": "feedback_first_v2",
+  "scorecard": {
+    "overall_score": 78.2,
+    "verdict": "Stable, maintenance-mode delivery with one low-confidence facial watch item.",
+    "badges": [
+      {
+        "label": "Posture",
+        "score": 81.4
+      },
+      {
+        "label": "Eye-contact distribution",
+        "score": 77.6
+      },
+      {
+        "label": "Gesture smoothness",
+        "score": 73.9
+      },
+      {
+        "label": "Positive affect",
+        "score": 68.8
+      },
+      {
+        "label": "Stage usage",
+        "score": 74.1
+      }
+    ]
+  },
   "executive_summary": "Delivery generally reads as upright and physically settled; room engagement appears reasonably distributed. Best visible window: 02:00-02:05. No material intervention needed from this clip; use the watchlist and strengths as maintenance guidance.",
   "no_material_intervention_needed": true,
   "no_material_intervention_needed_reason": "This clip is short enough that the visible issues are better treated as watch items than as real corrective feedback.",
@@ -83,7 +109,7 @@
       "headline": "Best visible window",
       "observed_behavior": "The teacher stayed upright and regularly re-engaged the room.",
       "metric_evidence": "Higher presence and steadier movement scores than surrounding windows.",
-      "qwen_interpretation": "This looks like a stable teaching segment that is more suitable for maintenance than correction.",
+      "semantic_interpretation": "This looks like a stable teaching segment that is more suitable for maintenance than correction.",
       "coaching_implication": "Preserve the room-check rhythm and use this window as the baseline to repeat."
     }
   ]

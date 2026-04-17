@@ -28,12 +28,14 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+from nonverbal_eval.runtime_config import DEFAULT_GEMINI_MODEL
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Run the long evaluation pipeline with Gemini Flash over local clips from /workspace/clips."
     )
-    parser.add_argument("--source-dir", type=Path, default=Path("/workspace/clips"), help="Directory containing pre-cut local clips.")
+    parser.add_argument("--source-dir", type=Path, default=Path("clips"), help="Directory containing pre-cut local clips.")
     parser.add_argument(
         "--output-dir",
         type=Path,
@@ -59,8 +61,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--analysis-fps", type=float, default=12.0, help="FPS used by the long evaluation pipeline.")
     parser.add_argument("--window-sec", type=float, default=15.0, help="Window size used by the long evaluation pipeline.")
     parser.add_argument("--window-step-sec", type=float, default=15.0, help="Window stride used by the long evaluation pipeline.")
-    parser.add_argument("--qwen-model", type=str, default="gemini-2.5-flash", help="Semantic review model.")
-    parser.add_argument("--coach-model", type=str, default="gemini-2.5-flash", help="Coaching model.")
+    parser.add_argument("--qwen-model", type=str, default=DEFAULT_GEMINI_MODEL, help="Semantic review model.")
+    parser.add_argument("--coach-model", type=str, default=DEFAULT_GEMINI_MODEL, help="Coaching model.")
     parser.add_argument("--goldset-count", type=int, default=12, help="Mark the first N clips as goldset candidates when registering.")
     parser.add_argument("--copy-clips", action="store_true", help="Copy clips into local_data instead of using symlinks.")
     parser.add_argument("--report-top-n", type=int, default=5, help="How many top and bottom clips to show in the markdown summary.")
@@ -345,8 +347,8 @@ def main() -> None:
                 window_step_sec=args.window_step_sec,
                 keyframe_offset_sec=-1.0,
                 enable_semantic=True,
-                semantic_sample_interval_sec=6.0,
-                semantic_max_samples=8,
+                semantic_sample_interval_sec=5.0,
+                semantic_max_samples=10,
                 disable_qwen=False,
                 qwen_model=args.qwen_model,
                 enable_coaching=True,

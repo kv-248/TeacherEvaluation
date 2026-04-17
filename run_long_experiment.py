@@ -4,6 +4,7 @@ import argparse
 from pathlib import Path
 
 from nonverbal_eval.app_service import run_teacher_evaluation
+from nonverbal_eval.runtime_config import DEFAULT_GEMINI_MODEL
 
 
 def parse_args() -> argparse.Namespace:
@@ -17,15 +18,15 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--window-step-sec", type=float, default=15.0, help="Window stride for lecture-level summaries.")
     parser.add_argument("--keyframe-offset-sec", type=float, default=-1.0, help="Keyframe offset inside the full analyzed segment. Negative means midpoint.")
     parser.add_argument("--enable-semantic", action="store_true", help="Run additive semantic analysis as extra evidence.")
-    parser.add_argument("--semantic-sample-interval-sec", type=float, default=6.0, help="Uniform sampling interval for semantic review frames.")
-    parser.add_argument("--semantic-max-samples", type=int, default=8, help="Maximum number of sampled frames for semantic review.")
+    parser.add_argument("--semantic-sample-interval-sec", type=float, default=5.0, help="Uniform sampling interval for semantic review frames.")
+    parser.add_argument("--semantic-max-samples", type=int, default=10, help="Maximum number of sampled frames for semantic review.")
     parser.add_argument("--disable-qwen", "--disable-semantic-model", dest="disable_qwen", action="store_true", help="Skip the semantic model annotator.")
-    parser.add_argument("--qwen-model", "--semantic-model", dest="qwen_model", type=str, default="gemini-2.5-flash", help="Model name for semantic review. Defaults to Gemini API.")
+    parser.add_argument("--qwen-model", "--semantic-model", dest="qwen_model", type=str, default=DEFAULT_GEMINI_MODEL, help="Model name for semantic review. Defaults to Gemini API.")
     parser.add_argument("--qwen-max-new-tokens", type=int, default=180, help="Maximum generated tokens for each semantic frame prompt.")
-    parser.add_argument("--qwen-temperature", type=float, default=0.1, help="Sampling temperature for the semantic prompt.")
+    parser.add_argument("--qwen-temperature", type=float, default=0.0, help="Sampling temperature for the semantic prompt.")
     parser.add_argument("--enable-coaching", action="store_true", help="Generate a teacher-facing coaching brief as an additive artifact.")
-    parser.add_argument("--coach-model", type=str, default="gemini-2.5-flash", help="Model name used to synthesize the coaching brief. Defaults to Gemini API.")
-    parser.add_argument("--coach-max-windows", type=int, default=6, help="Maximum number of time windows to review in the coaching report.")
+    parser.add_argument("--coach-model", type=str, default=DEFAULT_GEMINI_MODEL, help="Model name used to synthesize the coaching brief. Defaults to Gemini API.")
+    parser.add_argument("--coach-max-windows", type=int, default=8, help="Maximum number of time windows to review in the coaching report.")
     parser.add_argument("--coach-top-actions", type=int, default=3, help="Number of top-priority actions to include in the coaching brief.")
     parser.add_argument("--coach-render-pdf", action=argparse.BooleanOptionalAction, default=True, help="Render the coaching brief to PDF in addition to markdown and JSON.")
     parser.add_argument("--coach-fallback-template-only", action="store_true", help="Skip the small text model and use the deterministic coaching template only.")

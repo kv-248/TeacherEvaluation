@@ -2,7 +2,7 @@ version = "0.3.0"
 purpose = "Teacher-facing coaching synthesis prompt plus feedback-first fallback action and strength templates."
 
 [coaching_synthesis]
-model = "gemini-2.5-flash"
+model = "gemini-2.5-pro"
 fallback = "template"
 
 prompt = """
@@ -10,6 +10,7 @@ You are a teacher coach writing concise, practical feedback from structured nonv
 Return JSON only with exactly these top-level keys:
 - report_shape_version: string
 - executive_summary: string, max 85 words
+- scorecard: optional object with keys [overall_score, verdict, badges]
 - no_material_intervention_needed: boolean
 - no_material_intervention_needed_reason: string
 - top_strengths: array of objects with keys [title, evidence, what_to_repeat, timestamps, confidence]
@@ -20,7 +21,7 @@ Return JSON only with exactly these top-level keys:
 - keep_doing: array of short strings
 - watch_for: array of short strings
 - confidence_notes: array of short strings
-- evidence_moments: array of objects with keys [timestamp, headline, observed_behavior, metric_evidence, qwen_interpretation, coaching_implication]
+- evidence_moments: array of objects with keys [timestamp, headline, observed_behavior, metric_evidence, semantic_interpretation, coaching_implication]
 
 Requirements:
 - Use only the evidence provided by the user message.
@@ -30,7 +31,15 @@ Requirements:
 - If the evidence does not justify real corrective feedback, set no_material_intervention_needed=true, leave priority_actions empty, explain why, and move the weaker items into low_confidence_watchlist or strength_inventory.
 - Make strengths concrete and repeatable; do not use abstract titles without a visible behavior and a cited moment.
 - Use additional_observation_inventory to list important observations not already surfaced in priority_actions.
+- Do not place the same title or cue in both strengths and watch/action sections.
+- Do not repeat the same title across priority_actions, additional_observation_inventory, and low_confidence_watchlist.
 - If the evidence is weak, say so in confidence_notes instead of inventing certainty.
+- Each evidence_moment should capture a distinct timestamped pattern; avoid repeating the same semantic sentence across multiple windows.
+- If facial_expressiveness.facial_flatness_flag is true, include a concrete expressiveness drill.
+- If movement_presence.static_zone_time_pct is above 60, recommend a specific stage transition.
+- If gaze_dynamics.sweep_rate_per_min is below 2, recommend a deliberate gaze-sweep cue.
+- If a review window has board_context=true, avoid using it for eye-contact, facial-affect, or over-animation corrections.
+- Use movement_presence, facial_expressiveness, and gaze_dynamics when they materially sharpen the advice.
 - Prefer concrete next-lecture experiments over generic advice.
 Do not add markdown or explanation outside the JSON object.
 """

@@ -13,6 +13,7 @@ import numpy as np
 import pandas as pd
 
 from .coaching import CoachingConfig, run_coaching_report
+from .gemini_api import get_gemini_api_key, is_gemini_model
 from .pipeline import (
     ExperimentArtifacts,
     ExperimentConfig,
@@ -23,6 +24,7 @@ from .pipeline import (
     save_summary_markdown,
     summarize_frame_metrics,
 )
+from .runtime_config import DEFAULT_GEMINI_MODEL
 from .semantic import SemanticConfig, run_semantic_extensions
 
 
@@ -53,6 +55,44 @@ def _markdown_table(df: pd.DataFrame) -> str:
 def _emit(progress_callback: ProgressCallback | None, stage: str, **payload: Any) -> None:
     if progress_callback is not None:
         progress_callback(stage, payload)
+
+
+def _gemini_requirements(
+    *,
+    enable_semantic: bool,
+    disable_qwen: bool,
+    qwen_model: str,
+    enable_coaching: bool,
+    coach_model: str,
+    coach_fallback_template_only: bool,
+) -> list[str]:
+    requirements: list[str] = []
+    if enable_semantic and not disable_qwen and is_gemini_model(qwen_model):
+        requirements.append("semantic review")
+    if enable_coaching and not coach_fallback_template_only and is_gemini_model(coach_model):
+        requirements.append("coaching synthesis")
+    return requirements
+
+
+def _ensure_gemini_ready(requirements: list[str], events_path: Path) -> None:
+    if not requirements:
+        return
+    key = get_gemini_api_key()
+    log_event(
+        events_path,
+        "gemini_preflight",
+        key_present=bool(key),
+        requested_features=requirements,
+    )
+    if key:
+        return
+    feature_text = ", ".join(requirements)
+    raise RuntimeError(
+        "Gemini API key missing in the runtime environment. "
+        f"The requested Gemini-backed features were: {feature_text}. "
+        "Set GEMINI_API_KEY (preferred) or GOOGLE_API_KEY in the shell that runs Docker Compose, "
+        "or add GEMINI_API_KEY=... to TeacherEvaluation/.env before rerunning."
+    )
 
 
 def _video_info(video_path: Path) -> dict[str, float]:
@@ -246,15 +286,15 @@ def run_teacher_evaluation(
     window_step_sec: float = 15.0,
     keyframe_offset_sec: float = -1.0,
     enable_semantic: bool = False,
-    semantic_sample_interval_sec: float = 6.0,
-    semantic_max_samples: int = 8,
+    semantic_sample_interval_sec: float = 5.0,
+    semantic_max_samples: int = 10,
     disable_qwen: bool = False,
-    qwen_model: str = "gemini-2.5-flash",
+    qwen_model: str = DEFAULT_GEMINI_MODEL,
     qwen_max_new_tokens: int = 180,
-    qwen_temperature: float = 0.1,
+    qwen_temperature: float = 0.0,
     enable_coaching: bool = False,
-    coach_model: str = "gemini-2.5-flash",
-    coach_max_windows: int = 6,
+    coach_model: str = DEFAULT_GEMINI_MODEL,
+    coach_max_windows: int = 8,
     coach_top_actions: int = 3,
     coach_render_pdf: bool = True,
     coach_fallback_template_only: bool = False,
@@ -282,6 +322,15 @@ def run_teacher_evaluation(
         keyframe_offset_sec=keyframe_offset,
     )
     artifacts = build_long_run_artifacts(output_root)
+    gemini_requirements = _gemini_requirements(
+        enable_semantic=enable_semantic,
+        disable_qwen=disable_qwen,
+        qwen_model=qwen_model,
+        enable_coaching=enable_coaching,
+        coach_model=coach_model,
+        coach_fallback_template_only=coach_fallback_template_only,
+    )
+    _ensure_gemini_ready(gemini_requirements, artifacts.events_jsonl_path)
     window_csv = artifacts.root_dir / "window_summary.csv"
     window_json = artifacts.root_dir / "window_summary.json"
     window_md = artifacts.root_dir / "window_summary.md"
@@ -411,6 +460,23 @@ def run_teacher_evaluation(
             "tension_hostility_risk": window_summary["category_feedback"]["gesture_and_facial_expression"]["tension_hostility_risk"],
             "rigidity_risk": window_summary["category_feedback"]["gesture_and_facial_expression"]["rigidity_risk"],
             "closed_posture_risk": window_summary["category_feedback"]["posture_and_presence"]["closed_posture_risk"],
+            "static_zone_time_pct": window_summary["movement_presence"]["static_zone_time_pct"],
+            "coverage_area_pct": window_summary["movement_presence"]["coverage_area_pct"],
+            "pause_count": window_summary["movement_presence"]["pause_count"],
+            "dramatic_pause_count": window_summary["movement_presence"]["dramatic_pause_count"],
+            "static_stretch_count": window_summary["movement_presence"]["static_stretch_count"],
+            "gesture_motion_peak": window_summary["raw_metrics"]["gesture_motion_peak"],
+            "gesture_motion_std": window_summary["raw_metrics"]["gesture_motion_std"],
+            "gesture_extent_mean": window_summary["raw_metrics"]["gesture_extent_mean"],
+            "facial_flatness_flag": int(window_summary["facial_expressiveness"]["facial_flatness_flag"]),
+            "smile_rolling_std_mean": window_summary["facial_expressiveness"]["smile_rolling_std_mean"],
+            "brow_rolling_std_mean": window_summary["facial_expressiveness"]["brow_rolling_std_mean"],
+            "mouth_rolling_std_mean": window_summary["facial_expressiveness"]["mouth_rolling_std_mean"],
+            "sweep_rate_per_min": window_summary["gaze_dynamics"]["sweep_rate_per_min"],
+            "sector_dwell_mean": window_summary["gaze_dynamics"]["sector_dwell_mean"],
+            "sector_dwell_max": window_summary["gaze_dynamics"]["sector_dwell_max"],
+            "sector_distribution_entropy": window_summary["gaze_dynamics"]["sector_distribution_entropy"],
+            "longest_fixation_sec": window_summary["gaze_dynamics"]["longest_fixation_sec"],
             "heuristic_nonverbal_score": window_summary["scores"]["heuristic_nonverbal_score"],
         }
         rows.append(row)
