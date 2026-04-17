@@ -1,7 +1,0 @@
-model = "gpt-5.4-mini"
-model_reasoning_effort = "high"
-approval_policy = "never"
-sandbox_mode = "workspace-write"
-[agents]
-max_threads = 10
-max_depth = 2
