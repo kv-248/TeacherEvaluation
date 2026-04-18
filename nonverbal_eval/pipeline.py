@@ -1631,6 +1631,35 @@ def _scorecard_payload(summary: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+_SCORECARD_DESCRIPTIONS: dict[str, str] = {
+    "Posture": (
+        "How upright, open, and audience-facing your body stance appears throughout the clip. "
+        "High scores reflect a confident, unguarded position; low scores flag closed arms, "
+        "hunched shoulders, or persistent back-to-audience orientation."
+    ),
+    "Eye-contact distribution": (
+        "How evenly your visual attention reaches left, center, and right areas of the room, "
+        "and how actively your gaze moves rather than fixating on one zone. "
+        "Draws on gaze-sector balance, transition rate, and sweep-rate dynamics."
+    ),
+    "Gesture smoothness": (
+        "How controlled and fluid your hand and arm movements are, measured by spectral arc "
+        "length and log-dimensionless jerk of gesture trajectories. Low scores flag erratic "
+        "or oversized motion; high scores reflect deliberate, well-regulated gestures."
+    ),
+    "Positive affect": (
+        "A composite of visible smile activity, facial expressiveness variance, and open-palm "
+        "gesture frequency — a landmark-based proxy for the warmth and engagement your "
+        "delivery signals to the room."
+    ),
+    "Stage usage": (
+        "How much of the available stage area you occupy and how evenly you distribute time "
+        "across left, center, and right zones. Rewards purposeful movement and penalises "
+        "extended static anchoring to a single spot."
+    ),
+}
+
+
 def _render_scorecard(report: dict[str, Any] | None, summary: dict[str, Any], *, show_overall_score: bool = True) -> str:
     payload = (report or {}).get("scorecard") if isinstance(report, dict) else None
     if not isinstance(payload, dict):
@@ -1638,13 +1667,21 @@ def _render_scorecard(report: dict[str, Any] | None, summary: dict[str, Any], *,
     rows = []
     for badge in payload.get("badges", []):
         status = str(badge.get("status", "amber"))
+        label = badge.get("label", "Metric")
+        desc = _SCORECARD_DESCRIPTIONS.get(label, "")
         rows.append(
             "<tr>"
-            f"<td>{badge.get('label', 'Metric')}</td>"
+            f"<td>{label}</td>"
             f"<td>{float(badge.get('score', 0.0)):.1f}</td>"
             f"<td><span class=\"badge badge-{status}\">{status}</span></td>"
             "</tr>"
         )
+        if desc:
+            rows.append(
+                f"<tr class=\"signal-desc-row\">"
+                f"<td colspan=\"3\" class=\"signal-desc-text\">{desc}</td>"
+                f"</tr>"
+            )
     table_html = "\n".join(rows)
     top_html = (
         "<div class=\"scorecard-top\">"

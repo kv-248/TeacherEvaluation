@@ -1150,7 +1150,7 @@ def _classify_action_candidate(
 ) -> tuple[str, str]:
     cfg = _report_shape_thresholds()
     if reliability_label == "low":
-        return "watch", "Overall evidence quality is too limited for confident corrective feedback."
+        return "watch", "Overall evidence quality is too limited for a strong coaching recommendation."
     if clip_duration_sec < float(cfg["material_clip_min_sec"]):
         return "watch", "The clip is brief, so the signal is better treated as a watch item than a correction."
     if (
@@ -1165,7 +1165,7 @@ def _classify_action_candidate(
         and confidence == "high"
     ):
         return "corrective", "One well-supported window was strong enough to justify a targeted correction."
-    return "watch", "The signal is visible, but it is not yet sustained enough to justify real corrective feedback."
+    return "watch", "The signal is visible, but it is better treated as a watch item than a formal correction."
 
 
 def _draft_action_candidates(
@@ -1416,16 +1416,16 @@ def _no_material_reason(
 ) -> str:
     cfg = _report_shape_thresholds()
     if reliability_label == "low":
-        return "Evidence quality is too limited to justify corrective feedback in this clip."
+        return "Evidence quality is too limited for a strong coaching recommendation in this clip."
     if clip_duration_sec < float(cfg["material_clip_min_sec"]):
-        return "This clip is short enough that the visible issues are better treated as watch items than as real corrective feedback."
+        return "This clip is short enough that the visible issues are better treated as watch items for future review."
     if action_candidates:
         top = action_candidates[0]
         return (
             f"The clearest watch item was {top['title'].lower()}, but it appeared in only {top['support_count']} "
-            f"window(s) and did not clear the corrective-feedback bar."
+            f"window(s) and is best treated as a light watchpoint for now."
         )
-    return "No sustained issue repeated strongly enough to justify a corrective action."
+    return "No sustained issue repeated strongly enough to call for a corrective action from this sample."
 
 
 def _prefer_maintenance_mode(
@@ -2007,7 +2007,7 @@ def _fallback_report(evidence: dict[str, Any], config: CoachingConfig) -> dict[s
         executive_parts = [
             f"This clip is mostly a maintenance case: {strengths[0]['title'].lower()} is already visible.",
             evidence["overall_profile"]["pattern_summary"],
-            "No material intervention is required from this segment; use the observation inventory as light refinement guidance.",
+            "No major corrective action is needed from this segment; use the observation inventory as light refinement guidance.",
         ]
     else:
         executive_parts = [
@@ -2017,7 +2017,7 @@ def _fallback_report(evidence: dict[str, Any], config: CoachingConfig) -> dict[s
         if actions:
             executive_parts.append(f"Highest-priority adjustment: {actions[0]['title'].lower()}.")
         else:
-            executive_parts.append("No material intervention needed from this clip; use the watchlist and strengths as maintenance guidance.")
+            executive_parts.append("No major corrective action is needed from this clip; use the watchlist and strengths as maintenance guidance.")
 
     report = {
         "source": {
@@ -2182,7 +2182,7 @@ def _render_markdown(report: dict[str, Any], evidence: dict[str, Any], artifacts
 
     lines = ["# Brief", ""]
     if str(report.get("source", {}).get("mode", "")).startswith("template_fallback"):
-        lines.extend(["> LLM unavailable - showing template fallback.", ""])
+        lines.extend(["> Showing the structured fallback version of this brief for this run.", ""])
     lines.extend(
         [
             "## At a Glance",
@@ -2206,8 +2206,8 @@ def _render_markdown(report: dict[str, Any], evidence: dict[str, Any], artifacts
     if report.get("no_material_intervention_needed"):
         lines.extend(
             [
-                "- No material intervention needed from this clip.",
-                f"- Why: {report.get('no_material_intervention_needed_reason', 'The evidence did not justify a corrective action.')}",
+                "- No major corrective action is needed from this clip.",
+                f"- Why: {report.get('no_material_intervention_needed_reason', 'This sample is better treated as a maintenance case than a correction-focused one.')}",
                 "",
             ]
         )
@@ -2500,6 +2500,14 @@ def _render_pdf(markdown_path: Path, output_path: Path) -> None:
       border-radius: 3px;
       font-family: "DejaVu Sans Mono", monospace;
       font-size: 9pt;
+    }
+    tr.signal-desc-row td {
+      background: #f7fafc;
+      color: #5a7a8a;
+      font-size: 8.5pt;
+      font-style: italic;
+      padding: 3px 7px 7px 7px;
+      border-top: none;
     }
     table {
       width: 100%;
