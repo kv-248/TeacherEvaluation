@@ -17,11 +17,11 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Register pre-cut local clips into evaluation/local_data/clips and generate a matching manifest."
     )
-    parser.add_argument("--source-dir", type=Path, default=Path("/workspace/clips"), help="Directory that contains local validation clips.")
+    parser.add_argument("--source-dir", type=Path, default=Path("clips"), help="Directory that contains local validation clips.")
     parser.add_argument(
         "--manifest-out",
         type=Path,
-        default=Path("/workspace/TeacherEvaluation/evaluation/local_data/local_clip_manifest.csv"),
+        default=Path("evaluation/local_data/local_clip_manifest.csv"),
         help="Output CSV manifest path.",
     )
     parser.add_argument(

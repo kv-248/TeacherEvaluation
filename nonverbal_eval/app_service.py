@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 import time
 from collections.abc import Callable
 from datetime import datetime, timezone
@@ -13,7 +14,11 @@ import numpy as np
 import pandas as pd
 
 from .coaching import CoachingConfig, run_coaching_report
-from .gemini_api import get_gemini_api_key, is_gemini_model
+from .gemini_api import (
+    get_gemini_api_key,
+    is_gemini_model,
+    normalize_gemini_model_name,
+)
 from .pipeline import (
     ExperimentArtifacts,
     ExperimentConfig,
@@ -25,7 +30,7 @@ from .pipeline import (
     summarize_frame_metrics,
 )
 from .runtime_config import DEFAULT_GEMINI_MODEL
-from .semantic import SemanticConfig, run_semantic_extensions
+from .semantic import DEFAULT_FACE_MAX_SAMPLES, SemanticConfig, run_face_pass, run_semantic_extensions
 
 
 ProgressCallback = Callable[[str, dict[str, Any]], None]
@@ -74,7 +79,30 @@ def _gemini_requirements(
     return requirements
 
 
-def _ensure_gemini_ready(requirements: list[str], events_path: Path) -> None:
+def _gemini_models_by_feature(
+    *,
+    enable_semantic: bool,
+    disable_qwen: bool,
+    qwen_model: str,
+    enable_coaching: bool,
+    coach_model: str,
+    coach_fallback_template_only: bool,
+) -> dict[str, list[str]]:
+    model_features: dict[str, list[str]] = {}
+    if enable_semantic and not disable_qwen and is_gemini_model(qwen_model):
+        model = normalize_gemini_model_name(qwen_model)
+        model_features.setdefault(model, []).append("semantic review")
+    if enable_coaching and not coach_fallback_template_only and is_gemini_model(coach_model):
+        model = normalize_gemini_model_name(coach_model)
+        model_features.setdefault(model, []).append("coaching synthesis")
+    return model_features
+
+
+def _ensure_gemini_ready(
+    requirements: list[str],
+    model_features: dict[str, list[str]],
+    events_path: Path,
+) -> None:
     if not requirements:
         return
     key = get_gemini_api_key()
@@ -83,16 +111,26 @@ def _ensure_gemini_ready(requirements: list[str], events_path: Path) -> None:
         "gemini_preflight",
         key_present=bool(key),
         requested_features=requirements,
+        requested_models=sorted(model_features.keys()),
     )
-    if key:
-        return
-    feature_text = ", ".join(requirements)
-    raise RuntimeError(
-        "Gemini API key missing in the runtime environment. "
-        f"The requested Gemini-backed features were: {feature_text}. "
-        "Set GEMINI_API_KEY (preferred) or GOOGLE_API_KEY in the shell that runs Docker Compose, "
-        "or add GEMINI_API_KEY=... to TeacherEvaluation/.env before rerunning."
-    )
+    if not key:
+        feature_text = ", ".join(requirements)
+        raise RuntimeError(
+            "Gemini API key missing in the runtime environment. "
+            f"The requested Gemini-backed features were: {feature_text}. "
+            "Set GEMINI_API_KEY (preferred) or GOOGLE_API_KEY in the shell that runs Docker Compose, "
+            "or add GEMINI_API_KEY=... to TeacherEvaluation/.env before rerunning."
+        )
+
+    for model_name, features in sorted(model_features.items()):
+        log_event(
+            events_path,
+            "gemini_model_preflight_skipped",
+            model=model_name,
+            required_for=features,
+            reason="live preflight disabled; runtime Gemini calls will validate access",
+        )
+    return
 
 
 def _video_info(video_path: Path) -> dict[str, float]:
@@ -298,6 +336,9 @@ def run_teacher_evaluation(
     coach_top_actions: int = 3,
     coach_render_pdf: bool = True,
     coach_fallback_template_only: bool = False,
+    enable_face_semantic: bool = False,
+    face_model: str = DEFAULT_GEMINI_MODEL,
+    face_max_samples: int = DEFAULT_FACE_MAX_SAMPLES,
     progress_callback: ProgressCallback | None = None,
 ) -> dict[str, Any]:
     video_info = _video_info(video)
@@ -322,6 +363,11 @@ def run_teacher_evaluation(
         keyframe_offset_sec=keyframe_offset,
     )
     artifacts = build_long_run_artifacts(output_root)
+    source_copy_path = artifacts.root_dir / f"source_clip{Path(video).suffix or '.mp4'}"
+    try:
+        shutil.copy2(video, source_copy_path)
+    except OSError as exc:
+        log_event(artifacts.events_jsonl_path, "source_clip_copy_failed", error=str(exc))
     gemini_requirements = _gemini_requirements(
         enable_semantic=enable_semantic,
         disable_qwen=disable_qwen,
@@ -330,7 +376,15 @@ def run_teacher_evaluation(
         coach_model=coach_model,
         coach_fallback_template_only=coach_fallback_template_only,
     )
-    _ensure_gemini_ready(gemini_requirements, artifacts.events_jsonl_path)
+    gemini_model_features = _gemini_models_by_feature(
+        enable_semantic=enable_semantic,
+        disable_qwen=disable_qwen,
+        qwen_model=qwen_model,
+        enable_coaching=enable_coaching,
+        coach_model=coach_model,
+        coach_fallback_template_only=coach_fallback_template_only,
+    )
+    _ensure_gemini_ready(gemini_requirements, gemini_model_features, artifacts.events_jsonl_path)
     window_csv = artifacts.root_dir / "window_summary.csv"
     window_json = artifacts.root_dir / "window_summary.json"
     window_md = artifacts.root_dir / "window_summary.md"

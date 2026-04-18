@@ -652,3 +652,415 @@ def run_semantic_extensions(
         "summary": payload,
         "qwen": qwen_result,
     }
+
+
+DEFAULT_FACE_MAX_SAMPLES = 5
+FACE_MAX_SAMPLES_HARD_CAP = 5
+FACE_BBOX_PADDING = 1.5
+FACE_MIN_COVERAGE = 0.5
+
+ALLOWED_FACE_EMOTIONS = {
+    "warm_engaged",
+    "neutral_attentive",
+    "focused_concentrated",
+    "fatigued",
+    "tense",
+    "suppressed_smile",
+    "broad_smile",
+    "ambiguous",
+}
+
+FACE_PROMPT = (
+    "You are reviewing a single tight crop of a teacher's face from a classroom lecture. "
+    "The full body is not visible - only the face. Evaluate only what is visible in this crop. "
+    "Return a JSON object matching the schema. Use only the allowed enum values for categorical fields. "
+    "Be conservative: if unsure, pick 'ambiguous' and lower evidence_confidence."
+)
+
+
+def _face_annotation_schema() -> dict[str, Any]:
+    properties = {
+        "emotion": {
+            "type": "string",
+            "enum": sorted(ALLOWED_FACE_EMOTIONS),
+            "description": "Observed facial emotion category for this crop.",
+        },
+        "flags": {
+            "type": "object",
+            "description": "Boolean micro-cue flags observed on the face.",
+            "properties": {
+                "smile_asymmetric": {"type": "boolean"},
+                "brow_furrowed": {"type": "boolean"},
+                "eyes_squinted": {"type": "boolean"},
+                "jaw_tense": {"type": "boolean"},
+                "eyes_closed_blink": {"type": "boolean"},
+            },
+            "required": [
+                "smile_asymmetric",
+                "brow_furrowed",
+                "eyes_squinted",
+                "jaw_tense",
+                "eyes_closed_blink",
+            ],
+            "additionalProperties": False,
+            "propertyOrdering": [
+                "smile_asymmetric",
+                "brow_furrowed",
+                "eyes_squinted",
+                "jaw_tense",
+                "eyes_closed_blink",
+            ],
+        },
+        "rationale": {
+            "type": "string",
+            "description": "Short rationale, <=200 chars, describing what the crop shows.",
+        },
+        "evidence_confidence": {
+            "type": "string",
+            "enum": sorted(ALLOWED_QWEN_VALUES["evidence_confidence"]),
+            "description": "Confidence in the annotation.",
+        },
+    }
+    property_ordering = list(properties.keys())
+    return {
+        "type": "object",
+        "properties": properties,
+        "required": property_ordering,
+        "additionalProperties": False,
+        "propertyOrdering": property_ordering,
+    }
+
+
+def _build_face_annotation(
+    timestamp_sec: float,
+    reason: str,
+    crop_path: Path,
+    parsed: dict[str, Any],
+    raw_text: str,
+) -> dict[str, Any]:
+    emotion = str(parsed.get("emotion", "ambiguous")).strip()
+    if emotion not in ALLOWED_FACE_EMOTIONS:
+        emotion = "ambiguous"
+    flags_raw = parsed.get("flags") or {}
+    flags = {
+        key: bool(flags_raw.get(key, False))
+        for key in (
+            "smile_asymmetric",
+            "brow_furrowed",
+            "eyes_squinted",
+            "jaw_tense",
+            "eyes_closed_blink",
+        )
+    }
+    confidence = str(parsed.get("evidence_confidence", "medium")).strip()
+    if confidence not in ALLOWED_QWEN_VALUES["evidence_confidence"]:
+        confidence = "medium"
+    return {
+        "timestamp_sec": float(timestamp_sec),
+        "reason": reason,
+        "crop_path": str(crop_path),
+        "emotion": emotion,
+        "flags": flags,
+        "rationale": _sanitize_short_text(parsed.get("rationale", ""), max_words=35),
+        "evidence_confidence": confidence,
+        "raw_text": raw_text.strip(),
+    }
+
+
+def _choose_face_timestamps(
+    frame_metrics_df: pd.DataFrame,
+    clip_duration_sec: float,
+    interval_sec: float,
+    max_samples: int,
+) -> list[tuple[float, str]]:
+    reason_map: dict[float, list[str]] = {}
+
+    def add_reason(timestamp: float, reason: str) -> None:
+        bounded = float(np.clip(timestamp, 0.0, max(clip_duration_sec - 1e-3, 0.0)))
+        key = round(bounded, 2)
+        if key not in reason_map:
+            reason_map[key] = []
+        if reason not in reason_map[key]:
+            reason_map[key].append(reason)
+
+    add_reason(clip_duration_sec / 2.0, "clip_midpoint")
+
+    expressiveness_columns = {
+        "smile_rolling_std": "peak_smile_std",
+        "brow_rolling_std": "peak_brow_std",
+        "mouth_rolling_std": "peak_mouth_std",
+    }
+    for column, label in expressiveness_columns.items():
+        if column not in frame_metrics_df.columns or frame_metrics_df[column].dropna().empty:
+            continue
+        idx = frame_metrics_df[column].idxmax()
+        add_reason(float(frame_metrics_df.loc[idx, "timestamp_sec"]), label)
+
+    if "pause_state" in frame_metrics_df.columns:
+        prev_state = None
+        for _, row in frame_metrics_df.iterrows():
+            state = row.get("pause_state")
+            if state == "dramatic_pause" and prev_state != "dramatic_pause":
+                add_reason(float(row["timestamp_sec"]), "dramatic_pause_entry")
+            prev_state = state
+
+    add_reason(0.0, "clip_start")
+    add_reason(max(clip_duration_sec - 0.25, 0.0), "clip_end")
+
+    face_col = "face_bbox_w" if "face_bbox_w" in frame_metrics_df.columns else None
+    cov_col = "face_coverage" if "face_coverage" in frame_metrics_df.columns else None
+
+    def _face_visible_at(timestamp: float) -> bool:
+        if face_col is None:
+            return True
+        nearest = (frame_metrics_df["timestamp_sec"] - timestamp).abs().idxmin()
+        row = frame_metrics_df.loc[nearest]
+        if pd.isna(row.get(face_col)):
+            return False
+        if cov_col is not None and not pd.isna(row.get(cov_col)):
+            if float(row[cov_col]) < FACE_MIN_COVERAGE:
+                return False
+        return True
+
+    ordered = sorted(reason_map.items(), key=lambda item: item[0])
+    filtered: list[tuple[float, list[str]]] = [
+        (timestamp, list(reasons)) for timestamp, reasons in ordered if _face_visible_at(timestamp)
+    ]
+
+    merged: list[tuple[float, list[str]]] = []
+    dedupe_window = max(interval_sec * 0.5, 1.5)
+    for timestamp, reasons in filtered:
+        if not merged or abs(timestamp - merged[-1][0]) > dedupe_window:
+            merged.append((timestamp, reasons))
+        else:
+            for reason in reasons:
+                if reason not in merged[-1][1]:
+                    merged[-1][1].append(reason)
+
+    capped = min(max_samples, FACE_MAX_SAMPLES_HARD_CAP)
+    if len(merged) > capped:
+        indices = np.linspace(0, len(merged) - 1, capped, dtype=int)
+        merged = [merged[index] for index in sorted(set(indices.tolist()))]
+
+    return [(timestamp, ",".join(reasons)) for timestamp, reasons in merged]
+
+
+def _crop_face(
+    frame_bgr: np.ndarray,
+    bbox_x: float,
+    bbox_y: float,
+    bbox_w: float,
+    bbox_h: float,
+    padding: float = FACE_BBOX_PADDING,
+) -> np.ndarray:
+    frame_h, frame_w = frame_bgr.shape[:2]
+    cx = (bbox_x + bbox_w / 2.0) * frame_w
+    cy = (bbox_y + bbox_h / 2.0) * frame_h
+    pad_w = max(bbox_w * frame_w, 1.0) * padding / 2.0
+    pad_h = max(bbox_h * frame_h, 1.0) * padding / 2.0
+    x0 = int(max(cx - pad_w, 0))
+    y0 = int(max(cy - pad_h, 0))
+    x1 = int(min(cx + pad_w, frame_w - 1))
+    y1 = int(min(cy + pad_h, frame_h - 1))
+    if x1 <= x0 or y1 <= y0:
+        return frame_bgr
+    return frame_bgr[y0:y1, x0:x1]
+
+
+def _face_summary_markdown(payload: dict[str, Any]) -> str:
+    status = payload.get("status", "unknown")
+    lines = [
+        "# Face-Crop Semantic Summary",
+        "",
+        "Strictly additive. Does not change any base scalar score.",
+        "",
+        f"- Status: `{status}`",
+        f"- Reason: {payload.get('reason', '')}",
+        f"- Samples: `{len(payload.get('annotations', []))}`",
+        "",
+    ]
+    if status != "completed":
+        return "\n".join(lines) + "\n"
+
+    emotion_counts = payload.get("aggregate", {}).get("emotion_counts", {})
+    flag_counts = payload.get("aggregate", {}).get("flag_counts", {})
+    lines.append("## Emotion Distribution")
+    lines.append("")
+    for emotion, count in sorted(emotion_counts.items(), key=lambda kv: -kv[1]):
+        lines.append(f"- `{emotion}`: {count}")
+    lines.append("")
+    lines.append("## Flag Prevalence")
+    lines.append("")
+    for flag, count in sorted(flag_counts.items(), key=lambda kv: -kv[1]):
+        lines.append(f"- `{flag}`: {count}")
+    lines.append("")
+    lines.append("## Moments")
+    lines.append("")
+    for annotation in payload.get("annotations", []):
+        t = float(annotation["timestamp_sec"])
+        mm, ss = divmod(int(round(t)), 60)
+        flag_names = [name for name, value in annotation["flags"].items() if value]
+        flag_text = ", ".join(flag_names) if flag_names else "no flags"
+        lines.append(
+            f"- `{mm:02d}:{ss:02d}` emotion=`{annotation['emotion']}` "
+            f"confidence=`{annotation['evidence_confidence']}` "
+            f"flags: {flag_text}. {annotation['rationale']}"
+        )
+    return "\n".join(lines) + "\n"
+
+
+def run_face_pass(
+    clip_path: Path,
+    frame_metrics_df: pd.DataFrame,
+    clip_duration_sec: float,
+    run_dir: Path,
+    events_path: Path,
+    model: str,
+    max_samples: int = DEFAULT_FACE_MAX_SAMPLES,
+    sample_interval_sec: float = 5.0,
+) -> dict[str, Any]:
+    face_dir = run_dir / "face_crops"
+    face_dir.mkdir(parents=True, exist_ok=True)
+    annotations_path = run_dir / "face_annotations.json"
+    summary_md_path = run_dir / "face_summary.md"
+
+    payload: dict[str, Any] = {
+        "status": "skipped",
+        "reason": "Face pass disabled.",
+        "model": model,
+        "annotations": [],
+        "aggregate": {},
+    }
+
+    selections = _choose_face_timestamps(
+        frame_metrics_df=frame_metrics_df,
+        clip_duration_sec=clip_duration_sec,
+        interval_sec=sample_interval_sec,
+        max_samples=max_samples,
+    )
+    log_event(
+        events_path,
+        "face_samples_selected",
+        sample_count=len(selections),
+        timestamps_sec=[round(ts, 2) for ts, _ in selections],
+        reasons=[reason for _, reason in selections],
+    )
+
+    if not selections:
+        payload["status"] = "skipped"
+        payload["reason"] = "No face-visible timestamps qualified for face-crop review."
+        annotations_path.write_text(
+            json.dumps(payload, indent=2, ensure_ascii=True), encoding="utf-8"
+        )
+        summary_md_path.write_text(_face_summary_markdown(payload), encoding="utf-8")
+        return {
+            "artifacts": {
+                "face_crops_dir": str(face_dir),
+                "annotations_json": str(annotations_path),
+                "summary_md": str(summary_md_path),
+            },
+            "summary": payload,
+        }
+
+    annotations: list[dict[str, Any]] = []
+    try:
+        for index, (timestamp_sec, reason) in enumerate(selections):
+            nearest_idx = (frame_metrics_df["timestamp_sec"] - timestamp_sec).abs().idxmin()
+            row = frame_metrics_df.loc[nearest_idx]
+            bbox = (
+                float(row.get("face_bbox_x", np.nan)),
+                float(row.get("face_bbox_y", np.nan)),
+                float(row.get("face_bbox_w", np.nan)),
+                float(row.get("face_bbox_h", np.nan)),
+            )
+            if any(math.isnan(v) for v in bbox):
+                continue
+
+            frame_bgr = _extract_frame_at(clip_path, timestamp_sec)
+            crop_bgr = _crop_face(frame_bgr, *bbox)
+            if crop_bgr.size == 0:
+                continue
+            crop_path = face_dir / f"face_{index:02d}_{timestamp_sec:06.2f}s.jpg"
+            cv2.imwrite(str(crop_path), crop_bgr)
+
+            parsed, raw_text = generate_gemini_json(
+                model_name=model,
+                system_instruction=FACE_PROMPT,
+                user_text=(
+                    "Evaluate this cropped face. "
+                    f"Sample reason: {reason}. "
+                    f"Timestamp: {timestamp_sec:.2f}s."
+                ),
+                image_paths=[crop_path],
+                max_output_tokens=512,
+                temperature=0.0,
+                response_json_schema=_face_annotation_schema(),
+                request_metadata_recorder=lambda body, ts=timestamp_sec: log_event(
+                    events_path,
+                    "face_gemini_request",
+                    timestamp_sec=round(ts, 2),
+                    **body,
+                ),
+            )
+            annotations.append(
+                _build_face_annotation(timestamp_sec, reason, crop_path, parsed, raw_text)
+            )
+    except Exception as exc:
+        payload["status"] = "failed"
+        payload["reason"] = f"Face review unavailable: {sanitize_gemini_error_message(exc)}"
+        payload["annotations"] = annotations
+        annotations_path.write_text(
+            json.dumps(payload, indent=2, ensure_ascii=True), encoding="utf-8"
+        )
+        summary_md_path.write_text(_face_summary_markdown(payload), encoding="utf-8")
+        log_event(events_path, "face_pass_failed", reason=payload["reason"])
+        return {
+            "artifacts": {
+                "face_crops_dir": str(face_dir),
+                "annotations_json": str(annotations_path),
+                "summary_md": str(summary_md_path),
+            },
+            "summary": payload,
+        }
+
+    emotion_counts: dict[str, int] = {}
+    flag_counts: dict[str, int] = {}
+    for annotation in annotations:
+        emotion_counts[annotation["emotion"]] = emotion_counts.get(annotation["emotion"], 0) + 1
+        for flag_name, flag_value in annotation["flags"].items():
+            if flag_value:
+                flag_counts[flag_name] = flag_counts.get(flag_name, 0) + 1
+
+    payload.update(
+        {
+            "status": "completed",
+            "reason": "Face-crop semantic analysis completed.",
+            "annotations": annotations,
+            "aggregate": {
+                "sample_count": len(annotations),
+                "emotion_counts": emotion_counts,
+                "flag_counts": flag_counts,
+            },
+        }
+    )
+
+    annotations_path.write_text(
+        json.dumps(payload, indent=2, ensure_ascii=True), encoding="utf-8"
+    )
+    summary_md_path.write_text(_face_summary_markdown(payload), encoding="utf-8")
+    log_event(
+        events_path,
+        "face_pass_completed",
+        sample_count=len(annotations),
+        emotion_counts=emotion_counts,
+        flag_counts=flag_counts,
+    )
+
+    return {
+        "artifacts": {
+            "face_crops_dir": str(face_dir),
+            "annotations_json": str(annotations_path),
+            "summary_md": str(summary_md_path),
+        },
+        "summary": payload,
+    }

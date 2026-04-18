@@ -367,7 +367,7 @@ def main() -> None:
             )
             copied_artifacts["coaching_report_pdf"] = _copy_if_exists(
                 coaching_artifacts.get("report_pdf"),
-                report_dir / "teacher_coaching_report.pdf",
+                report_dir / "report.pdf",
             )
             copied_artifacts["semantic_summary_md"] = _copy_if_exists(
                 semantic_artifacts.get("summary_md"),

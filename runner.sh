@@ -6,12 +6,10 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
 ENV_FILE="$SCRIPT_DIR/.env"
-if [[ -z "${GEMINI_API_KEY:-}" && -z "${GOOGLE_API_KEY:-}" ]]; then
-  if [[ ! -f "$ENV_FILE" ]] || ! grep -Eq '^[[:space:]]*GEMINI_API_KEY[[:space:]]*=[[:space:]]*[^[:space:]#]+' "$ENV_FILE"; then
-    echo "Gemini API key not found in shell environment or $ENV_FILE." >&2
-    echo "Set GEMINI_API_KEY in the shell that runs Docker Compose, or add GEMINI_API_KEY=... to TeacherEvaluation/.env." >&2
-    exit 1
-  fi
+if [[ ! -f "$ENV_FILE" ]] || ! grep -Eq '^[[:space:]]*GEMINI_API_KEY[[:space:]]*=[[:space:]]*[^[:space:]#]+' "$ENV_FILE"; then
+  echo "Gemini API key not found in $ENV_FILE." >&2
+  echo "Docker runs now use .env as the single source of truth. Add GEMINI_API_KEY=... to TeacherEvaluation/.env." >&2
+  exit 1
 fi
 
 if [[ $# -eq 0 ]]; then

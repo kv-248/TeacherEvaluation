@@ -133,7 +133,7 @@ def build_coaching_artifacts(run_dir: Path) -> CoachingArtifacts:
         evidence_json_path=run_dir / "coaching_evidence.json",
         report_json_path=run_dir / "teacher_coaching_report.json",
         report_md_path=run_dir / "teacher_coaching_report.md",
-        report_pdf_path=run_dir / "teacher_coaching_report.pdf",
+        report_pdf_path=run_dir / "report.pdf",
         moments_dir=moments_dir,
     )
 
@@ -2180,28 +2180,11 @@ def _render_markdown(report: dict[str, Any], evidence: dict[str, Any], artifacts
     def _moment_semantic_text(item: dict[str, Any]) -> str:
         return str(item.get("semantic_interpretation") or item.get("qwen_interpretation") or "Semantic review unavailable.").strip()
 
-    lines = ["# Teacher Coaching Brief", ""]
+    lines = ["# Brief", ""]
     if str(report.get("source", {}).get("mode", "")).startswith("template_fallback"):
         lines.extend(["> LLM unavailable - showing template fallback.", ""])
-    scorecard_summary = {
-        "scores": {
-            "heuristic_nonverbal_score": float(evidence["score_snapshot"]["overall_score"]),
-            "posture_stability_score": float(evidence["score_snapshot"]["confidence_presence_score"]),
-            "eye_contact_distribution_score": float(evidence["score_snapshot"]["eye_contact_distribution_score"]),
-            "gesture_smoothness_score": float(evidence["score_snapshot"]["natural_movement_score"]),
-            "positive_affect_score": float(evidence["score_snapshot"]["positive_affect_score"]),
-            "stage_usage_score": float(evidence["score_snapshot"]["stage_usage_score"]),
-        },
-        "interpretation": {
-            "overall_nonverbal_signal": _metric_band(float(evidence["score_snapshot"]["overall_score"])),
-        },
-    }
     lines.extend(
         [
-            "## Scorecard",
-            "",
-            _render_scorecard(report, scorecard_summary, show_overall_score=False),
-            "",
             "## At a Glance",
             "",
             report["executive_summary"],
@@ -2386,12 +2369,6 @@ def _render_markdown(report: dict[str, Any], evidence: dict[str, Any], artifacts
             "- Window summary: `window_summary.md`",
             "- Semantic summary: `semantic_extensions/semantic_summary.md` if semantic mode was enabled for the run",
             "- Coaching evidence JSON: `coaching_evidence.json`",
-            "",
-            "## Report Provenance",
-            "",
-            f"- Source mode: `{report.get('source', {}).get('mode', 'unknown')}`",
-            f"- Model: `{report.get('source', {}).get('model') or 'template fallback'}`",
-            "- Teacher-facing report sections are either Gemini-generated, template fallback, or Gemini output merged onto fallback.",
         ]
     )
     return "\n".join(lines).strip() + "\n"
@@ -2413,7 +2390,7 @@ def _render_pdf(markdown_path: Path, output_path: Path) -> None:
     )
     html = f"""<!doctype html>
 <html lang="en">
-  <head><meta charset="utf-8"><title>Teacher Coaching Brief</title></head>
+  <head><meta charset="utf-8"><title>Brief</title></head>
   <body>{body_html}</body>
 </html>
 """

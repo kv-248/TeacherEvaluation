@@ -23,16 +23,16 @@ This repository contains a research-backed nonverbal-cue evaluation pipeline for
 
 ## Main report
 
-- Markdown: `docs/nonverbal_eval_research_report.md`
-- PDF: `docs/nonverbal_eval_research_report.pdf`
+- Thesis: `docs/thesis_research_report.md` / `docs/thesis_research_report_v3.pdf`
+- Legacy report: `docs/nonverbal_eval_research_report.md` / `.pdf`
 
-The report includes:
+The thesis covers:
 
-- tracked metrics and how they are computed
+- tracked metrics and how they are computed (including the v2 proxemics, pause-event, gaze-dynamics, and facial-expressiveness cues)
 - literature traceability for each metric
-- experiment results on the sample lecture video
-- the 1-minute context-window run at `12 fps`
-- debug and automation-boundary discussion
+- evaluation across multiple 60 s clips
+- §6 qualitative validation: seven keyframes where pipeline claims were cross-checked against the visible scene
+- reliability-gating and automation-boundary discussion
 
 The long-run runner can now emit a separate coaching artifact set:
 
@@ -96,8 +96,8 @@ python run_long_experiment.py \
   --duration-sec 60 \
   --analysis-fps 12 \
   --enable-semantic \
-  --semantic-model gemini-2.5-flash \
-  --coach-model gemini-2.5-flash
+  --semantic-model gemini-2.5-pro \
+  --coach-model gemini-2.5-pro
 ```
 
 This is the recommended path for this repo. It avoids local heavy-model downloads and uses the Gemini API for both frame-level semantic review and final coaching synthesis.
@@ -147,7 +147,7 @@ Optional semantic layer with Qwen and SAM2 as additive outputs only:
 pip install -r requirements_optional_semantic.txt
 ```
 
-Gemini coaching output is validated against the `feedback_first_v1` report shape and falls back to the deterministic template brief if the response cannot be parsed cleanly.
+Gemini coaching output is validated against the `feedback_first_v2` report shape and falls back to the deterministic template brief if the response cannot be parsed cleanly.
 
 Fast smoke test with no semantic model call:
 
@@ -174,15 +174,21 @@ To use Gemini in the Streamlit frontend without editing code:
 
 ```bash
 export GEMINI_API_KEY=your_rotated_key_here
-export TEACHER_EVALUATION_SEMANTIC_MODEL=gemini-2.5-flash
-export TEACHER_EVALUATION_COACH_MODEL=gemini-2.5-flash
+export TEACHER_EVALUATION_SEMANTIC_MODEL=gemini-2.5-pro
+export TEACHER_EVALUATION_COACH_MODEL=gemini-2.5-pro
 streamlit run streamlit_app.py
 ```
 
 Then enable semantic review in the sidebar and turn off template-only coaching if you want the final coaching brief to use Gemini too.
 
 
-To regenerate the report figures and PDF:
+To regenerate the thesis PDF (mermaid-aware, Edge-headless renderer):
+
+```bash
+python docs/render_thesis_pdf.py --input docs/thesis_research_report.md --output docs/thesis_research_report_v3.pdf
+```
+
+Legacy report PDF (WeasyPrint path):
 
 ```bash
 python docs/generate_report_figures.py
@@ -194,8 +200,9 @@ python docs/render_report_pdf.py --input docs/nonverbal_eval_research_report.md 
 - The current MediaPipe/TFLite path is effectively CPU-bound in this environment. The two available A40 GPUs are not the main acceleration path for the current inference stack.
 - The semantic layer is strictly additive. It writes separate semantic artifacts and does not change the existing heuristic score formulas.
 - The coaching layer is also strictly additive. It builds a separate teacher-facing brief from structured evidence and does not overwrite `summary_full.*` or `window_summary.*`.
-- The default semantic model is `gemini-2.5-flash`.
-- The default coaching synthesis model is also `gemini-2.5-flash`. If that call is unavailable or the response is malformed, the runner falls back to a deterministic template-driven coaching brief.
+- The default semantic model is `gemini-2.5-pro` with dynamic thinking (`thinkingBudget=-1`).
+- The default coaching synthesis model is also `gemini-2.5-pro`. If that call is unavailable, quota-exceeded, or the response fails `feedback_first_v2` validation, the runner falls back to a deterministic template-driven coaching brief.
+- Landmark-derived cues now include proxemic zone dwell, pause-event detection (dramatic vs. static), gaze sweep rate, and rolling facial-expressiveness variance — all fed into existing composite scores rather than introducing new headline metrics.
 - No local heavy LLM or VLM download is required for the default path. The optional `transformers` and `accelerate` stack is only for legacy local experiments. SAM2 has a stricter torch requirement and is therefore gated behind explicit config/checkpoint arguments and version checks.
 - The current runtime expects the legacy MediaPipe `solutions` API, so `requirements.txt` pins `mediapipe==0.10.21` and a compatible OpenCV/Numpy range.
 - `.codex/`, workspace session logs, and unrelated local state are intentionally excluded.

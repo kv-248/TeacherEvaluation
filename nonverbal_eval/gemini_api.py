@@ -22,6 +22,7 @@ _MAX_RETRIES = 4
 _INITIAL_BACKOFF_SEC = 1.5
 _MAX_BACKOFF_SEC = 12.0
 _JITTER_SEC = 0.35
+_PREFLIGHT_MAX_OUTPUT_TOKENS = 32
 
 
 def is_gemini_model(model_name: str) -> bool:
@@ -281,6 +282,61 @@ def _parse_json_like_text(text: str, schema: dict[str, Any] | None = None) -> di
         return salvaged
 
     raise ValueError(f"Could not parse Gemini JSON response: {last_error}")
+
+
+def preflight_gemini_model(
+    model_name: str,
+    *,
+    timeout_sec: int = 30,
+) -> dict[str, Any]:
+    api_key = get_gemini_api_key()
+    if not api_key:
+        raise RuntimeError("Gemini API key not found. Set GEMINI_API_KEY or GOOGLE_API_KEY.")
+
+    model = normalize_gemini_model_name(model_name)
+    thinking_config = _thinking_config_for(model)
+    payload: dict[str, Any] = {
+        "contents": [
+            {
+                "parts": [
+                    {"text": 'Return {"ok": true} as JSON.'},
+                ]
+            }
+        ],
+        "generationConfig": {
+            "temperature": 0.0,
+            "maxOutputTokens": _PREFLIGHT_MAX_OUTPUT_TOKENS,
+            "responseMimeType": "application/json",
+        },
+    }
+    if thinking_config is not None:
+        payload["generationConfig"]["thinkingConfig"] = thinking_config
+
+    request = urllib.request.Request(
+        GEMINI_API_URL.format(model=urllib.parse.quote(model, safe="")),
+        data=json.dumps(payload).encode("utf-8"),
+        headers={
+            "Content-Type": "application/json",
+            "x-goog-api-key": api_key,
+        },
+        method="POST",
+    )
+
+    try:
+        with urllib.request.urlopen(request, timeout=timeout_sec) as response:
+            response_json = json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        body = exc.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"Gemini preflight HTTP {exc.code}: {sanitize_gemini_error_message(body)}") from exc
+    except urllib.error.URLError as exc:
+        raise RuntimeError(f"Gemini preflight request failed: {sanitize_gemini_error_message(exc.reason)}") from exc
+
+    _extract_response_text(response_json)
+    return {
+        "model": model,
+        "thinking_config": thinking_config,
+        "max_output_tokens": _PREFLIGHT_MAX_OUTPUT_TOKENS,
+    }
 
 
 def generate_gemini_json(

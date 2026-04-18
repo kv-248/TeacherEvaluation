@@ -395,6 +395,10 @@ def _extract_frame_metrics(results: Any, pose_landmark_enum: Any) -> dict[str, A
         "eye_open_ratio": np.nan,
         "brow_eye_ratio": np.nan,
         "face_area": np.nan,
+        "face_bbox_x": np.nan,
+        "face_bbox_y": np.nan,
+        "face_bbox_w": np.nan,
+        "face_bbox_h": np.nan,
         "arm_span_ratio": np.nan,
         "open_palm_frame": 0.0,
         "pointing_frame": 0.0,
@@ -493,7 +497,9 @@ def _extract_frame_metrics(results: Any, pose_landmark_enum: Any) -> dict[str, A
 
         xs = np.array([pt.x for pt in face], dtype=np.float32)
         ys = np.array([pt.y for pt in face], dtype=np.float32)
-        face_area = float((xs.max() - xs.min()) * (ys.max() - ys.min()))
+        x_min, x_max = float(xs.min()), float(xs.max())
+        y_min, y_max = float(ys.min()), float(ys.max())
+        face_area = float((x_max - x_min) * (y_max - y_min))
 
         row.update(
             {
@@ -505,6 +511,10 @@ def _extract_frame_metrics(results: Any, pose_landmark_enum: Any) -> dict[str, A
                 "eye_open_ratio": float(eye_open),
                 "brow_eye_ratio": float(brow_eye_ratio),
                 "face_area": face_area,
+                "face_bbox_x": x_min,
+                "face_bbox_y": y_min,
+                "face_bbox_w": x_max - x_min,
+                "face_bbox_h": y_max - y_min,
             }
         )
 

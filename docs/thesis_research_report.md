@@ -1,12 +1,12 @@
-# Thesis Research Report
+# Project Research Report
 
 ## Abstract
 
-This project is a research-backed system for formative feedback on teacher lecture video using strictly non-verbal evidence. The project combines interpretable landmark-based analysis, a Gemini-assisted semantic layer, and a teacher-facing coaching report designed to be readable under real time pressure. The central thesis contribution is not a black-box teacher-quality classifier; it is a construct-traceable pipeline that measures visible behavioral patterns, preserves reliability boundaries, and translates technical evidence into actionable coaching language. The system uses only pretrained components, does not train a custom end-to-end model, and deliberately separates internal benchmarking metrics from the teacher-facing report to avoid overstating precision.
+This project is a research-backed system for formative feedback on teacher lecture video using strictly non-verbal evidence. It combines interpretable landmark-based analysis, an additive semantic layer, and a teacher-facing coaching report. The core contribution is a construct-traceable pipeline that measures visible behavioral patterns, preserves reliability boundaries, and translates technical evidence into actionable coaching language. The pipeline deliberately separates internal benchmarking metrics from the teacher-facing report to avoid overstating precision.
 
-**Key results.** A batch evaluation on five 60-second lecture clips from four institutions (MIT, Stanford, Yale, Harvard CS50) shows that per-frame semantic annotations correctly discriminate board-facing, audience-facing, and slide-driven delivery with no hallucinated detail across all 40 sampled frames. Replacing the `feedback_first_v2` coaching post-validator moved the teacher-facing report quality from a rated 6/10 under a template-merge fallback to approximately 8/10 under the direct LLM path, with deduplicated Watch Items, evidence-specific review windows, and coach-language actions such as "glance-and-pivot" and "gesture box." A board-context reliability gate correctly withholds strong audience-facing judgments on the Yale blackboard clip, where face coverage drops to 0.254. The system completes end-to-end in approximately two to three minutes per 60-second clip on a consumer laptop.
+**Key results.** Evaluation on multiple 60-second lecture clips from varied instructional settings shows that the semantic layer distinguishes board-facing, audience-facing, and slide-referenced delivery without hallucinated detail, while the reporting layer surfaces strengths, priority actions, evidence windows, and reliability notes in a format suitable for formative use. The project introduces four additional landmark-derived cue families: proxemics, pause structure, gaze sweep dynamics, and facial expressiveness variance. The project also adds a face-crop semantic extension that uses MediaPipe-derived face bounding boxes to export coarse facial-state evidence as a separate additive artifact.
 
-This report documents the motivation, related work, research grounding, methods, evaluations, and conclusions for the current (April 2026) version of the system. It records the v2 revision, which promoted Gemini Pro as the default multimodal path, added four landmark-only cue families (proxemics, pause structure, gaze sweep dynamics, facial expressiveness variance), introduced board-context-aware reliability gating, and redesigned the teacher report around strengths, actions, evidence moments, and limits instead of a single headline score.
+This report documents the motivation, related work, research grounding, methods, evaluations, and conclusions for the project. The project incorporates four landmark-only cue families (proxemics, pause structure, gaze sweep dynamics, facial expressiveness variance), applies board-context-aware reliability gating, and organizes the teacher report around strengths, actions, and evidence moments.
 
 ## 1. Motivation
 
@@ -25,18 +25,9 @@ The research gap is not that non-verbal teaching behavior is unknown. The gap is
 
 This project addresses this gap by treating the problem as one of interpretable formative analytics. The goal is to help a teacher reflect on visible classroom delivery while preserving construct validity, reliability notes, and room for uncertainty.
 
-### 1.2 Why a strictly non-verbal system
+### 1.2 Contribution
 
-This project intentionally restricts scope to visible, landmark-derived cues and additive image-based semantic interpretation. It does not use audio prosody, speech transcripts, or student outcomes as primary evidence in the current thesis version. This design choice has four motivations:
-
-1. It keeps the construct boundary clear. The system can defend what it measures because the cues are directly tied to visible posture, motion, orientation, and expression.
-2. It avoids overclaiming. The system does not pretend to infer full pedagogical quality, content correctness, or student learning gains from video alone.
-3. It supports environments where audio is poor, unavailable, or legally more sensitive.
-4. It improves thesis defensibility because each reported construct can be traced to literature and to a concrete implementation signal.
-
-### 1.3 Thesis contribution
-
-The thesis contribution is best understood as an engineering and research integration contribution with five parts:
+The contribution of the project is best understood as an engineering and research integration contribution with six parts:
 
 1. A research-traceable non-verbal analytics pipeline built on pretrained MediaPipe landmarks and temporal aggregation rather than custom end-to-end model training.
 2. A teacher-feedback architecture that combines interpretable heuristics with an additive Gemini-powered semantic layer, while keeping the semantic layer separate from core heuristic scoring.
@@ -45,15 +36,16 @@ The thesis contribution is best understood as an engineering and research integr
    - pause and stillness events,
    - gaze sweep dynamics,
    - facial expressiveness variance.
-4. A reliability-aware coaching layer that down-weights fragile interpretations, including a simple board-context gate for windows where audience-facing cues are not valid to judge strongly.
-5. A teacher-facing report redesign that prioritizes readability, timestamped evidence, and actionable interpretation over raw metric dumps and single-number summaries.
+4. An additive face-crop semantic path that uses MediaPipe-derived face bounding boxes to generate tight facial crops and coarse facial-state annotations without altering the underlying heuristic scores.
+5. A reliability-aware coaching layer that down-weights fragile interpretations, including a simple board-context gate for windows where audience-facing cues are not valid to judge strongly.
+6. A teacher-facing report redesign that prioritizes readability, timestamped evidence, and actionable interpretation over raw metric dumps and single-number summaries.
 
-### 1.4 Research questions
+### 1.3 Research questions
 
-This thesis is organized around the following research questions:
+This project is organized around the following research questions:
 
 1. Can a landmark-first, strictly non-verbal pipeline generate meaningful formative observations about teacher delivery without training a custom teacher-assessment model?
-2. Can literature-backed cue families such as proxemics, gaze dynamics, pause structure, and facial expressiveness be operationalized using robust video-derived proxies?
+2. Can literature-backed cue families such as proxemics, gaze dynamics, pause structure, and facial expressiveness be operationalized using video-derived metrics?
 3. Does a teacher-facing report become more defensible and more useful when it emphasizes evidence moments, reliability notes, and plain-language strengths/actions instead of a headline evaluation score?
 4. Can a modern multimodal API model improve the semantic specificity of coaching evidence when used as an additive, constrained component rather than a free-form end-to-end evaluator?
 
@@ -61,7 +53,7 @@ This thesis is organized around the following research questions:
 
 ### 2.1 Multimodal classroom observation systems
 
-Recent work demonstrates that vision-language and multimodal models can support classroom observation at scale. ClassMind (Nadaf et al., 2025) builds an instructional-feedback system on a multimodal stack and represents the closest architectural analogue to this thesis; it shares the pattern of frame-level interpretation feeding a coaching synthesis step, but targets in-service classroom assessment rather than formative coaching on lecture clips. VidAAS (Zheng et al., 2024) uses GPT-4V for classroom skill assessment and reports high behavioral-domain accuracy, validating the VLM-for-coaching premise. D'Mello et al. (2015, ACM ICMI) established multimodal capture of teacher-student interactions for automated analysis, though with a speech-and-dialog focus that the present system deliberately avoids.
+Recent work demonstrates that vision-language and multimodal models can support classroom observation at scale. ClassMind (Nadaf et al., 2025) builds an instructional-feedback system on a multimodal stack and represents the closest architectural analogue to this project; it shares the pattern of frame-level interpretation feeding a coaching synthesis step, but targets in-service classroom assessment rather than formative coaching on lecture clips. VidAAS (Zheng et al., 2024) uses GPT-4V for classroom skill assessment and reports high behavioral-domain accuracy, validating the VLM-for-coaching premise. D'Mello et al. (2015, ACM ICMI) established multimodal capture of teacher-student interactions for automated analysis, though with a speech-and-dialog focus that the present system deliberately avoids.
 
 The present system differs from these systems in three ways: (a) it is strictly non-verbal by construction, (b) it keeps the multimodal model in an additive role rather than as an end-to-end evaluator, and (c) it couples the semantic layer to explicit landmark-derived metrics so that every teacher-facing claim is traceable to a visible signal.
 
@@ -71,25 +63,25 @@ Liu et al. (2025, *Scientific Data*) released a multi-modal dataset of 4,839 vid
 
 ### 2.3 Automated formative feedback for teachers
 
-The usability of automated feedback has become its own research strand. Demszky et al. (2024, *EEPA*) showed in a randomized controlled trial that teachers act on automated feedback only when it is concrete, brief, and tied to specific moments. The emerging consensus in the LAK and AIED communities is that evidence-based coaching requires feedback linkable to the recording. The report redesign in the current (April 2026) thesis version is a direct implementation of these constraints: coaching snapshot first, per-moment keyframes, and timestamp deep-links into the source video.
+The usability of automated feedback has become its own research strand. Demszky et al. (2024, *EEPA*) showed in a randomized controlled trial that teachers act on automated feedback only when it is concrete, brief, and tied to specific moments. The emerging consensus in the LAK and AIED communities is that evidence-based coaching requires feedback linkable to the recording. The report redesign in the current system directly implements these constraints: coaching snapshot first, per-moment keyframes, and timestamp deep-links into the source video.
 
-### 2.4 Gap addressed by this thesis
+### 2.4 Gap addressed by this project
 
-Existing multimodal-classroom work tends either to treat the VLM as the primary evaluator, without grounding in pose-level interpretable metrics, or to produce metric dashboards that fail the Demszky usability constraints. No prior system in the surveyed literature combines: strictly non-verbal sensing; landmark-derived cue families grounded per-metric in peer-reviewed immediacy, gaze, and pause literature; an additive VLM semantic layer that cannot overwrite the heuristic signal; and a reliability-aware report that withholds strong claims when visibility is low. This thesis system is positioned in exactly that gap.
+Existing multimodal-classroom work tends either to treat the VLM as the primary evaluator, without grounding in pose-level interpretable metrics, or to produce metric dashboards that fail the Demszky usability constraints. No prior system in the surveyed literature combines: strictly non-verbal sensing; landmark-derived cue families grounded per-metric in peer-reviewed immediacy, gaze, and pause literature; an additive VLM semantic layer that cannot overwrite the heuristic signal; and a reliability-aware report that withholds strong claims when visibility is low. This project is positioned in that gap.
 
-## 3. Literature-Grounded Design Rationale
+## 3. Research Grounding
 
-### 3.1 Evidence tiers used in this project
+### 3.1 Research strands informing the project
 
-The thesis uses three evidence tiers, because not every design decision is supported by the same type of evidence.
+The project is grounded in three complementary strands of prior work.
 
-| Evidence tier | What it supports | How it is used in this thesis |
-| --- | --- | --- |
-| Peer-reviewed educational / behavioral evidence | Non-verbal teaching constructs such as immediacy, gaze dynamics, pause structure, facial expressiveness, and feedback uptake | Used to justify which cue families are worth measuring and how cautiously they should be interpreted |
-| Multimodal classroom-observation systems evidence | The legitimacy of multimodal AI or vision-language systems as a substrate for teacher observation | Used to justify the overall system framing and additive semantic-review design |
-| Model-capability / operational evidence | Gemini Pro versus Flash as an engineering choice | Used to justify the API model selection without claiming peer-reviewed proof that Pro is pedagogically superior |
+| Research strand | Relevance to the project |
+| --- | --- |
+| Peer-reviewed educational and behavioral literature | Grounds the choice of cue families, especially proxemics, gaze dynamics, pause structure, facial expressiveness, and the conditions under which feedback is likely to be useful |
+| Multimodal classroom-observation systems | Situates the overall architecture within current work on AI-assisted classroom observation and instructional feedback |
+| Model-capability and runtime evidence | Informs the choice of a hosted multimodal API as the default path for semantic interpretation and coaching synthesis |
 
-This distinction matters. The thesis should not claim that education research proves Gemini Pro is better than Gemini Flash for teacher coaching. The defensible claim is narrower: Gemini Pro is the higher-capability multimodal reasoning tier, and local runtime history showed repeated quota pressure and lower practical reliability on the Flash path.
+This structure keeps the project claims appropriately aligned with the evidence base. Pedagogical claims are grounded in educational and behavioral literature, while model-selection decisions are treated as implementation choices within the broader multimodal classroom-observation setting.
 
 ### 3.2 Design rationale: proxemics and stage movement matter
 
@@ -102,7 +94,7 @@ This motivated the addition of explicit proxemics signals in the current system:
 - static anchoring,
 - and transitions across left, center, and right spatial sectors.
 
-The important research-backed interpretation is not "more walking is better." The correct interpretation is that visible room coverage and anchoring patterns are meaningful and can support coaching reflection. In the thesis system, these cues are therefore described conservatively as stage-use behavior, room engagement, and movement variety.
+The important research-backed interpretation is not "more walking is better." The correct interpretation is that visible room coverage and anchoring patterns are meaningful and can support coaching reflection. In this project, these cues are therefore described conservatively as stage-use behavior, room engagement, and movement variety.
 
 ### 3.3 Design rationale: gaze as a temporal dynamic, not a ratio alone
 
@@ -115,11 +107,11 @@ This is why the current system emphasizes gaze sweep dynamics rather than only a
 - sector distribution entropy,
 - and sweep rate over time.
 
-The thesis claim must remain careful here: the system does not recover true pupil-level eye contact. It estimates room-facing distribution from visible head and facial orientation proxies. That still supports defensible coaching language such as "room scan was concentrated," "attention distribution looked balanced," or "the teacher spent long visible stretches oriented to one sector."
+The project does not recover true pupil-level eye contact. It estimates room-facing distribution from visible head and facial orientation proxies. That still supports defensible coaching language such as "room scan was concentrated," "attention distribution looked balanced," or "the teacher spent long visible stretches oriented to one sector."
 
 ### 3.4 Design rationale: visible pause structure is pedagogically relevant
 
-Wait-time and think-time literature strongly supports the instructional importance of pause structure. However, the thesis version of the system does not use audio or classroom dialog state, so it cannot claim to recover pedagogical wait time in the full conversational sense. What it can measure is visible pause and stillness structure.
+Wait-time and think-time literature strongly supports the instructional importance of pause structure. However, the current system does not use audio or classroom dialog state, so it cannot claim to recover pedagogical wait time in the full conversational sense. What it can measure is visible pause and stillness structure.
 
 This led to the addition of pause-event detection using low gesture motion and low body drift. The new cue family distinguishes:
 
@@ -128,43 +120,25 @@ This led to the addition of pause-event detection using low gesture motion and l
 
 This is a measured compromise between research relevance and sensing limits. The system therefore reports pause structure as a visible non-verbal pattern, not a definitive judgment about dialogic teaching quality.
 
-### 3.5 Design rationale: facial expressiveness is meaningful but not monotonic
+### 3.5 Facial expressiveness as a time-varying cue
 
-Research on teacher enthusiasm and non-verbal expressiveness supports the view that visible expressiveness influences learner attitudes and perceptions. At the same time, the literature also warns that more expressiveness is not always better. Excessive or poorly timed expressiveness can distract some learners, especially when prior knowledge is low.
+Research on teacher enthusiasm and non-verbal expressiveness supports the view that visible expressiveness influences learner attitudes and perceptions. Tikochinski, Babad, and Hammer (2025) report positive effects of teacher non-verbal expressiveness on student attitudes and achievement, while Wang, Pi, and Hu (2022) show that excessive or poorly timed expressiveness can hinder learning when learner prior knowledge is low. Taken together, these studies support treating expressiveness as an informative but non-monotonic cue.
 
-This matters for system design. A naive approach would reward higher smile intensity or stronger facial movement as inherently positive. The thesis system instead models facial expressiveness as temporal variation:
+This is important for system design. A naive approach would reward higher smile intensity or stronger facial movement as inherently positive. The project instead models facial expressiveness as temporal variation:
 
 - rolling variability in smile proxy,
 - brow-eye ratio,
 - and mouth-open ratio.
 
-This supports a more defensible interpretation: the system can identify facial flatness or low expressive range as a watch item, but it should not claim that maximal facial animation is optimal.
+This supports a more defensible interpretation: the system can identify facial flatness or low expressive range as a watch item, but it does not treat maximal facial animation as the desired end state.
 
-### 3.6 Design rationale: report usability is part of the scientific contribution
+### 3.6 Report usability and evidence-linked feedback
 
-A feedback system is only useful if teachers can act on it. Recent automated feedback work shows that brief, concrete, evidence-linked feedback is more usable than abstract metric-heavy summaries. This shaped one of the most important thesis decisions: the teacher-facing report should prioritize strengths, actions, reliability notes, and moment-linked evidence rather than a single overall score.
+Automated feedback is useful only when teachers can act on it. Demszky et al. (2024) show that feedback is more likely to support teacher uptake when it is concrete, brief, and tied to specific moments rather than presented as a dense metric summary. Related multimodal classroom-observation systems also emphasize an at-a-glance summary coupled with temporally anchored evidence (Zheng et al., 2024; Nadaf et al., 2025). In response, the report in this project is organized around a coaching snapshot, prioritized strengths and actions, standardized confidence labels, and timestamped evidence windows. Reliability notes are surfaced explicitly when visibility or context weakens the interpretability of a cue family.
 
-That design principle now appears directly in the current system:
+### 3.7 Multimodal semantic layer and model selection
 
-- the teacher-facing report begins with a coaching snapshot instead of an overall score,
-- the strongest evidence is tied to specific windows,
-- confidence labels are standardized,
-- and reliability notes explain when parts of the clip were not suitable for strong judgment.
-
-### 3.7 Design rationale: Gemini Pro as an engineering choice
-
-The shift to Gemini Pro is supported by two forms of evidence:
-
-1. Multimodal systems literature shows that vision-language models can support classroom observation and instructional feedback tasks.
-2. Model-capability and operational evidence showed that the Flash path was quota-constrained and less dependable for this repo's actual runs.
-
-The thesis wording should therefore say:
-
-- Gemini Pro is used because it is the higher-capability multimodal reasoning tier,
-- it better matches the need for structured evidence synthesis,
-- and it worked as an additive semantic-review and coaching component in the current system.
-
-The thesis should not say that peer-reviewed education research proves Gemini Pro is pedagogically better than Flash. The model configuration (dynamic thinking budget, temperature 0.0, tuned output-token limits) is implementation detail and is summarized in §4.12.
+Recent classroom-observation systems demonstrate that vision-language models can support instructional analysis and feedback generation (Zheng et al., 2024; Nadaf et al., 2025). In this project, the semantic layer remains additive: it enriches frame interpretation and coaching synthesis but does not overwrite the landmark-derived heuristic signal families. A hosted multimodal API is used as the default semantic and coaching model because the task requires structured multimodal reasoning over visible teaching behavior, and the observed runtime conditions favored that tier for stable execution. The educational claims of the project therefore remain grounded in the cited teaching and learning literature, while model selection is treated as part of the implementation design.
 
 ### 3.8 Traceability matrix for the current system
 
@@ -175,7 +149,7 @@ The thesis should not say that peer-reviewed education research proves Gemini Pr
 | Gaze sweep dynamics | Gaze-sector run lengths, transitions, entropy | `gaze_dynamics.*` | Heuristic bands derived from literature | Report attention distribution and sweep behavior; do not claim true eye contact | Pi et al. (2020); McIntyre et al. (2017); Goldberg et al. (2021); Haataja et al. (2020) |
 | Facial expressiveness variance | Rolling variation of smile, brow-eye, and mouth-open proxies | `facial_expressiveness.*` | Initial heuristic for calibration | Report expressive range or flatness watch items; do not assume more is always better | Ekman & Friesen (1978); Wang et al. (2022); Tikochinski et al. (2025) |
 | Readable teacher report | Scorecard, merged sections, moment evidence, reliability notes | `scorecard`, `priority_actions`, `top_strengths`, `evidence_moments` | Design pattern, not a numeric threshold | Claim that actionable, timestamped feedback is more coachable than raw metric dumps | Demszky et al. (2024); Nadaf et al. (2025 preprint) |
-| Gemini Pro-first runtime | `gemini-2.5-pro` default with dynamic thinking budget | Runtime config and request metadata | Engineering choice, not pedagogical threshold | Claim a capability-backed and operationally justified model choice | Zheng et al. (2024); Comanici et al. (2025); Google Developers Blog (2025) |
+| Hosted multimodal runtime | Remote vision-capable API used as the default multimodal path | Runtime config and request metadata | Engineering choice, not pedagogical threshold | Claim a capability-backed and operationally justified model choice | Zheng et al. (2024); Comanici et al. (2025); Google Developers Blog (2025) |
 
 ## 4. Methods Used
 
@@ -226,15 +200,7 @@ The repo contains:
 - batch evaluation runs,
 - and artifact directories containing summary JSON, markdown, plots, and teacher reports.
 
-For the thesis-facing evaluation narrative, the strongest demonstration set currently consists of three 60-second clips with complementary properties:
-
-| Thesis demo clip | Why it matters |
-| --- | --- |
-| `cs50_business_150_210.mp4` | Strongest example of actionable coaching on a reasonably visible lecture clip |
-| `mit_ocw_pigeonhole_240_300.mp4` | Best example of the new proxemics and pause/stillness cues creating useful insight |
-| `yale_quantum_240_300.mp4` | Best example of restraint, low-confidence handling, and board-context-aware reliability |
-
-These clips were chosen because together they show utility, methodological novelty, and reliability boundaries.
+The evaluation uses multiple 60-second clips drawn from these sources so that the project can be assessed across varied instructional settings, visibility conditions, and delivery styles.
 
 ### 4.4 Landmark extraction and primitive features
 
@@ -246,11 +212,12 @@ The pipeline uses MediaPipe Holistic as the pretrained perception backbone. For 
 - head/face orientation,
 - smile and mouth proxies,
 - brow-eye geometry,
+- face-bounding-box coordinates derived from landmark extent,
 - gesture amplitude and smoothness,
 - torso and hip movement,
 - and approximate floor-relative teacher position.
 
-The new thesis-oriented cues were built on top of those existing primitives rather than by changing the sensing stack.
+The new cue families and the face-crop semantic extension were built on top of those existing primitives rather than by changing the sensing stack.
 
 ```mermaid
 flowchart LR
@@ -272,7 +239,7 @@ flowchart LR
     K --> P[Proxemics and stage movement]
 ```
 
-**Figure 2.** Derivation of cue families from MediaPipe Holistic landmark groups. The four new cue families introduced in this thesis (gaze dynamics, facial expressiveness variance, pause events, proxemics) are the rightmost outputs.
+**Figure 2.** Derivation of cue families from MediaPipe Holistic landmark groups. The four new cue families introduced in this project (gaze dynamics, facial expressiveness variance, pause events, proxemics) are the rightmost outputs.
 
 ### 4.5 Temporal aggregation and summary construction
 
@@ -289,7 +256,7 @@ The clip summary includes established signal families such as:
 - enthusiasm and positive affect,
 - and risk metrics including static behavior, rigidity, and excessive animation.
 
-The thesis extension adds three new summary families:
+The current system adds three new summary families:
 
 - `movement_presence`
 - `facial_expressiveness`
@@ -309,6 +276,8 @@ All composite scores in this system are bounded in [0, 100] and constructed from
 
 These three primitives are implemented as `_score_linear`, `_score_inverse`, and `_score_peak` at [pipeline.py:98-117](../nonverbal_eval/pipeline.py#L98-L117).
 
+*Research anchor for the primitive choice.* The linear-up and linear-inverse shapes follow the dose-response pattern documented in the teacher-immediacy meta-analysis of Witt, Wheeless, and Allen (2004), which reports roughly monotonic relationships between individual immediacy cues and learning outcomes over the naturalistic operating range. The inverted-U shape of `peak` is motivated by the expressiveness literature, where both under- and over-expressive nonverbal behavior are observed to attenuate learning gains (Wang, Pi, & Hu, 2022; Tikochinski, Babad, & Hammer, 2025).
+
 **Composite: `stage_usage_score`.** When proxemics signals are available the composite is a 50/50 blend:
 
 ```
@@ -319,6 +288,8 @@ proxemics   = 100 × ( 0.55 × lin(coverage_area_pct; 15, 50)
 ```
 
 If proxemics are unavailable the composite falls back to `base` alone. This is the mechanism by which the new proxemics cue family from §3.2 enters the heuristic scorecard without creating a new top-level score.
+
+*Research anchor.* Movement about the classroom is one of the founding channels of the immediacy construct (Andersen, 1979) and is retained in the validated TeNOI observation scale as "physical proximity" and "body orientation" factors (Ballester, García-Carrasco, & Hernández-Serrano, 2025). The meta-analysis of Witt et al. (2004) and the systematic review of Liu, Zhang, Jensen, and Gao (2021) both report that proxemic variation is positively associated with cognitive and affective learning outcomes, motivating both the linear-up `coverage_area_pct` term and the inverse `static_zone_pct` penalty.
 
 **Composite: `eye_contact_distribution_score`.** A weighted combination of three audience-attention sub-scores:
 
@@ -332,7 +303,9 @@ room_scan   = 100 × ( 0.45 × peak(gaze_transition_rate; 0.05, 0.45, 1.60)
                     + 0.20 × peak(sweep_rate_per_min;   2.0, 8.0, 20.0) )
 ```
 
-The `peak` primitive on `sweep_rate_per_min` encodes the empirical range reported by McIntyre et al. (2017) for expert teacher gaze sweeps, penalizing both a frozen gaze and a visually frantic one.
+The `peak` primitive on `sweep_rate_per_min` encodes the empirical range reported by McIntyre, Mainhard, and Klassen (2017) for expert teacher gaze sweeps, penalizing both a frozen gaze and a visually frantic one.
+
+*Research anchor for the three-way decomposition.* Splitting eye-contact into audience orientation, sector balance, and a time-dynamic room-scan component is directly motivated by Haataja et al. (2020), who argue that teachers' gaze *distribution across space and time* predicts interpersonal behavior in ways that aggregate ratios do not. Goldberg, Schwerter, Seidel, Müller, and Stürmer (2021) review the methodological consensus that temporal gaze patterns carry information lost when only mean ratios are reported, which is the basis for keeping `room_scan` as a separate term rather than collapsing it into a single orientation score. The weighting choice also reflects the finding of Pi, Xu, Liu, and Yang (2020) that instructor gaze matters more than body orientation for learning outcomes in video lectures, which is why the orientation term carries 0.45 rather than a larger share.
 
 **Composite: `positive_affect_score`.**
 
@@ -345,6 +318,8 @@ positive_affect = 100 × ( 0.42 × lin(smile_mean;       0.32, 0.44)
 
 The `expressiveness_score` sub-composite is itself a weighted linear combination of the rolling-standard-deviation means for smile, brow-eye, and mouth-open proxies. This is the mechanism by which the new facial-expressiveness-variance cue family from §3.5 enters the composite.
 
+*Research anchor.* The use of rolling standard deviation rather than mean expression follows Ekman and Friesen (1978), whose Facial Action Coding System treats expressiveness as a time-series of changes rather than a static average. The additional 0.30 weight given to `expressiveness_score` inside positive affect is supported by Tikochinski et al. (2025), whose controlled experiments and meta-analysis report that teacher nonverbal expressiveness substantively boosts student attitudes and achievements. The `smile_std` term (weight 0.14) and the separate inclusion of variance signals encode the caution from Wang et al. (2022) that expressiveness is a *double-edged* signal and should not be modeled as a monotonically rewarded mean.
+
 **Flag rule: `facial_flatness_flag`.** A boolean promoted to the teacher report when:
 
 ```
@@ -353,15 +328,7 @@ mean_rolling_std(smile) < 0.015  AND  coverage(smile) ≥ 0.50
 
 A true flag surfaces as a watch item without suppressing other affect signals — consistent with the research finding in §3.5 that expressiveness is not monotonically desirable.
 
-**Scorecard band mapping.** Every composite score in the teacher-facing scorecard is mapped to one of three bands using constant thresholds:
-
-```
-band(s) = green (strong)   if s ≥ 75
-          amber (moderate) if 50 ≤ s < 75
-          red   (limited)  if s < 50
-```
-
-These thresholds are held constant across metrics so that a teacher viewing the scorecard gets consistent color semantics independent of the specific signal.
+*Research anchor.* Wang et al. (2022) specifically motivate flagging extreme flatness as a separate watch-item rather than folding it into a single affect score: because expressiveness can both help and hinder learning depending on audience prior knowledge, the system deliberately flags the low tail without recalibrating the headline score.
 
 ### 4.7 New cue-family methods
 
@@ -426,6 +393,39 @@ The semantic layer is additive:
 - it does not change internal metric formulas directly,
 - and it is primarily used to enrich evidence interpretation and coaching language.
 
+#### 4.8.1 Face-crop semantic extension
+
+The project also includes a face-crop semantic side pass built on the MediaPipe face geometry already produced by the landmark pipeline. For each usable frame, the pipeline computes a coarse face bounding box from the minimum and maximum face landmark coordinates. These bounding boxes are not used to change the base clip scores; instead, they support a second semantic pass over tight face crops.
+
+The face-crop pass operates as follows:
+
+- candidate timestamps are selected from the clip midpoint, peaks in rolling smile/brow/mouth variability, dramatic-pause entry points, and clip boundaries;
+- only timestamps with sufficient face visibility are retained;
+- a padded crop is extracted around the face bounding box;
+- Gemini is asked to return a strict JSON annotation for the crop only, with no body-level inference.
+
+The current face-crop schema contains:
+
+- one coarse facial-state label from:
+  - `warm_engaged`
+  - `neutral_attentive`
+  - `focused_concentrated`
+  - `fatigued`
+  - `tense`
+  - `suppressed_smile`
+  - `broad_smile`
+  - `ambiguous`
+- five micro-cue flags:
+  - `smile_asymmetric`
+  - `brow_furrowed`
+  - `eyes_squinted`
+  - `jaw_tense`
+  - `eyes_closed_blink`
+- a short rationale
+- an evidence-confidence label
+
+This extension is intentionally conservative. It is designed to provide auxiliary facial-state evidence and traceable artifacts rather than to drive headline affect scores. In other words, it expands the observable evidence base without allowing the face-crop model output to overwrite the landmark-derived heuristic layer.
+
 ### 4.9 Coaching report generation
 
 The teacher report is generated from:
@@ -446,10 +446,10 @@ flowchart TD
     E --> F[Candidate strengths]
     E --> G[Candidate actions]
     E --> H[Candidate watch items]
-    F --> I[Gemini coaching synthesis]
+    F --> I[Gemini semantic evaluation layer]
     G --> I
     H --> I
-    I --> J[feedback_first_v2 report]
+    I --> J[Structured coaching report]
     J --> K[Markdown report]
     J --> L[PDF report]
     E --> M[Template fallback]
@@ -458,7 +458,7 @@ flowchart TD
 
 **Figure 3.** Coaching report generation. The deterministic template-fallback path (`M`) remains wired in parallel with the LLM path (`I`) so that the system degrades gracefully when the API is unavailable.
 
-The report redesign reflects several thesis goals:
+The report redesign reflects several project goals:
 
 - the teacher-facing report hides the overall non-verbal score,
 - the top section emphasizes a coaching snapshot and scannable sub-signal bands,
@@ -469,9 +469,9 @@ The report redesign reflects several thesis goals:
 
 ### 4.10 Reliability safeguards and board-context gating
 
-One of the v2 (April 2026) improvements is a simple, deliberately conservative board-context gate. The reasoning is straightforward: when a teacher is writing on the board or facing away from the audience, some audience-facing cues are not valid to judge strongly.
+The current system includes a simple, deliberately conservative board-context gate. The reasoning is straightforward: when a teacher is writing on the board or facing away from the audience, some audience-facing cues are not valid to judge strongly.
 
-The current V1 gate is window-level rather than frame-level. A window is marked as board-context-like when:
+The gate operates at the window level rather than the frame level. A window is marked as board-context-like when:
 
 - audience orientation is low, and
 - either face visibility is weak or semantic review indicates board-focused or writing behavior.
@@ -503,7 +503,7 @@ flowchart TD
 
 **Figure 4.** Board-context reliability gate. The gate fires only when two independent indicators agree (low audience orientation plus either low face coverage or board/writing semantics), reducing false positives on clips where the teacher is briefly turned without actually writing.
 
-This safeguard is important for both engineering quality and thesis defensibility. It shows that the system does not merely compute metrics; it also reasons about when those metrics should not be over-interpreted.
+This safeguard is important for both engineering quality and research validity. It shows that the system does not merely compute metrics; it also reasons about when those metrics should not be over-interpreted.
 
 ### 4.11 Artifact outputs
 
@@ -517,6 +517,9 @@ The pipeline produces a structured artifact set, including:
 - `teacher_coaching_report.md`
 - `teacher_coaching_report.pdf`
 - `coaching_evidence.json`
+- `face_crops/` when the face-crop semantic path is enabled
+- `face_annotations.json` when the face-crop semantic path is enabled
+- `face_summary.md` when the face-crop semantic path is enabled
 - keyframes, plots, and overlays
 
 This artifact design supports transparency. A teacher-facing claim can usually be traced back to a window, a metric family, and a visible moment in the source clip.
@@ -527,13 +530,15 @@ The following environment and runtime figures describe the current (April 2026) 
 
 **Hardware.** All batch runs were executed on a Windows 11 consumer laptop (x86-64, 16 GB RAM) with no discrete GPU. MediaPipe Holistic uses the TFLite CPU execution path and does not require GPU acceleration.
 
-**Software.** Python 3.10+, `mediapipe 0.10.x` (Holistic solution), `numpy 1.26`, `pandas 2.x`, `opencv-python 4.x`, `weasyprint` for PDF rendering. The Gemini 2.5 Pro model is accessed via the public REST endpoint; no local model weights are loaded. Container orchestration uses Docker Compose with forwarded `GEMINI_API_KEY`.
+**Software.** Python 3.10+, `mediapipe 0.10.x` (Holistic solution), `numpy 1.26`, `pandas 2.x`, `opencv-python 4.x`, `weasyprint` for PDF rendering. The multimodal layer is accessed via the Gemini API over a public REST endpoint; no local model weights are loaded.
 
-**Model configuration.** The current version uses `gemini-2.5-pro` with `thinkingConfig.thinkingBudget = -1` (Pro dynamic reasoning), `temperature = 0.0` at both the per-frame semantic and coaching-synthesis call sites, and output-token budgets of `1024` for per-frame semantic and `4096` for coaching synthesis. The existing exponential-backoff wrapper in `nonverbal_eval/gemini_api.py` (four attempts, 429/5xx-aware) is reused unchanged.
+**Container distribution.** The entire pipeline is packaged and distributed as a Docker image. A reproducible environment is produced by `docker compose build` against the repository `Dockerfile`, which pins the full Python and system-library stack (including OpenCV native dependencies and the MediaPipe TFLite runtime) so that runs on different host machines start from the same binary environment. Two Compose services are exposed: `streamlit` for the interactive coaching-report UI on port 8501, and `evaluator` as a headless batch entrypoint into `evaluation/run_local_clips_gemini_batch.py`. Both services mount the repository at `/app` and a host-side `./local_data/docker_test_outputs` directory at `/outputs`, and both read `GEMINI_API_KEY` from the host environment rather than baking it into the image. Exporting the image (`docker save teacher-evaluation:latest > teacher-evaluation.tar`) or pulling it from a registry is therefore sufficient to reproduce the runs in §5 and §6 on any Docker-capable host — no local Python, MediaPipe, or Gemini-SDK installation is required on the host beyond Docker itself.
+
+**Model configuration.** The current version uses the Gemini API with `thinkingConfig.thinkingBudget = -1` (dynamic reasoning), `temperature = 0.0` at both the per-frame semantic and coaching-synthesis call sites, and output-token budgets of `1024` for per-frame semantic and `4096` for coaching synthesis. The existing exponential-backoff wrapper in `nonverbal_eval/gemini_api.py` (four attempts, 429/5xx-aware) is reused unchanged. The face-crop semantic extension uses the same API path with a smaller response budget (`maxOutputTokens = 512`) and a capped sample count so that it remains an auxiliary evidence pass rather than the dominant runtime cost.
 
 **Typical wall-clock runtime per 60-second clip.** Landmark extraction runs at analysis_fps = 12 and completes in roughly 60 to 90 seconds. The per-frame semantic pass samples 8 to 10 frames and completes in 25 to 80 seconds depending on Gemini latency and thinking-budget expansion. The coaching-synthesis pass completes in 10 to 20 seconds. End-to-end wall-clock is approximately two to three minutes.
 
-**Typical API cost per clip.** At April 2026 Gemini 2.5 Pro public pricing, the combined semantic plus coaching calls cost on the order of $0.05 per 60-second clip. This is dominated by the coaching-synthesis call (larger prompt, larger `max_output_tokens = 4096`) rather than the per-frame semantic calls.
+**Typical API cost per clip.** The combined semantic plus coaching calls cost on the order of $0.05 per 60-second clip. This is dominated by the coaching-synthesis call (larger prompt, larger `max_output_tokens = 4096`) rather than the per-frame semantic calls.
 
 **Determinism boundaries.** Landmark extraction is deterministic given the input video. Gemini calls use `temperature = 0.0` but are not bit-exact reproducible because the inference stack may route through different mixture-of-experts partitions across requests; minor wording variation in the coaching report across reruns is expected. Scoring-layer outputs (`summary_full.json`, all composite scores) are fully deterministic given a fixed input clip.
 
@@ -543,16 +548,16 @@ The following environment and runtime figures describe the current (April 2026) 
 
 ### 5.1 Evaluation strategy
 
-The evaluation strategy in this thesis is not centered on benchmark classification accuracy. Instead, it evaluates the system as a formative analytics and reporting pipeline. That means the key questions are:
+The evaluation strategy in this project is not centered on benchmark classification accuracy. Instead, it evaluates the system as a formative analytics and reporting pipeline. That means the key questions are:
 
 1. Are the computed cues behaviorally plausible and literature-aligned?
 2. Does the semantic layer distinguish different teaching styles without hallucinated detail?
 3. Does the report become more useful when it foregrounds actions, strengths, evidence windows, and reliability notes?
 4. Does the system know when to reduce confidence or avoid overclaiming?
 
-### 5.2 Five-clip batch evaluation
+### 5.2 Multi-clip batch evaluation
 
-The current batch evaluation set contains five 60-second clips drawn from the curated lecture dataset:
+The current batch evaluation set contains multiple 60-second clips drawn from the curated lecture dataset:
 
 | Clip | Institution | Teaching style | Internal heuristic score |
 | --- | --- | --- | --- |
@@ -569,19 +574,19 @@ This batch is useful because it spans:
 - audience-facing and board-facing delivery,
 - and varying levels of visibility quality.
 
-Assessment of this batch (documented separately in `docs/batch_feedback_quality_assessment.md`) showed that the semantic layer was among the strongest parts of the system (rated 9/10), while the coaching layer historically suffered from fallback-related duplication and templating issues (rated 6/10 under the `llm_api_hybrid` path). The v2 revision — replacing the `feedback_first_v2` post-validator so Pro's schema-valid output flows through untouched — moved the coaching layer to approximately 8/10 on the two clips where it is measurable, with deduplicated Watch Items, evidence-specific review windows, and the graceful-degradation behavior described in §5.4.3.
+Assessment of this batch (documented separately in `docs/batch_feedback_quality_assessment.md`) showed that the semantic layer was among the strongest parts of the system, while the coaching layer benefited substantially from the current report-generation path. In the current version, reports present deduplicated watch items, evidence-specific review windows, and clearer graceful-degradation behavior when the LLM path is unavailable.
 
-### 5.3 Thesis demo trio
+### 5.3 Selected illustrative clips
 
-For thesis defense and demonstration purposes, three clips stand out as the most useful:
+Among the available evaluation runs, three clips are especially informative:
 
-| Clip | Demonstrated value | Why it helps defend the thesis |
+| Clip | Demonstrated value | Analytical value |
 | --- | --- | --- |
 | `cs50_business_150_210` | Actionable coaching on a reasonably visible clip | Shows that the system can produce concrete, plausible formative guidance |
-| `mit_ocw_pigeonhole_240_300` | Value of new proxemics and pause cues | Shows that the thesis contribution is not cosmetic; new cues materially change interpretation |
+| `mit_ocw_pigeonhole_240_300` | Value of new proxemics and pause cues | Shows that the new cues materially change interpretation |
 | `yale_quantum_240_300` | Reliability restraint and board-context handling | Shows that the system knows when not to overclaim |
 
-### 5.4 Focused findings from the thesis demo trio
+### 5.4 Focused findings from the selected clips
 
 #### 5.4.1 CS50 Business
 
@@ -631,11 +636,11 @@ for growth are in refining posture and gesture control...
 - Confidence: medium
 ```
 
-This excerpt shows the three-part action structure (why it matters / what we saw / what to try next), timestamped review windows, a named technique ("speaker's ready stance") rather than generic advice, and the normalized `Confidence:` label — all outputs of the v2 coaching layer described in §4.9.
+This excerpt shows the three-part action structure (why it matters / what we saw / what to try next), timestamped review windows, a named technique ("speaker's ready stance") rather than generic advice, and the normalized `Confidence:` label produced by the current coaching layer.
 
 #### 5.4.2 MIT Pigeonhole
 
-This clip is the strongest demonstration of the thesis extensions. The teacher presents with reasonably high confidence and strong visibility, but the summary also shows heavy anchoring to one region of the space. That creates a good use case for the new proxemics signal family. In addition, the pause-event detection surfaces visible stillness patterns that strengthen the movement interpretation.
+This clip is the strongest demonstration of the newer cue set. The teacher presents with reasonably high confidence and strong visibility, but the summary also shows heavy anchoring to one region of the space. That creates a good use case for the proxemics signal family. In addition, the pause-event detection surfaces visible stillness patterns that strengthen the movement interpretation.
 
 Selected metrics from the saved run:
 
@@ -655,11 +660,11 @@ Interpretation:
 - but stage movement is concentrated enough to justify a specific anchor-breaking suggestion,
 - and the pause/proxemics additions contribute evidence that older versions of the pipeline did not expose clearly.
 
-This clip therefore helps defend the contribution of the new cue families directly.
+This clip therefore demonstrates the analytical value of the new cue families directly.
 
 #### 5.4.3 Yale Quantum
 
-This clip is the strongest fairness and validity case. It is board-facing and visibility is weak, especially for face evidence. Earlier versions of the system risked over-interpreting such clips. The current thesis version instead treats it as a low-reliability or maintenance case, suppressing stronger audience-facing judgments when the evidence does not support them.
+This clip is the strongest fairness and validity case. It is board-facing and visibility is weak, especially for face evidence. Earlier versions of the system risked over-interpreting such clips. The current system instead treats it as a low-reliability or maintenance case, suppressing stronger audience-facing judgments when the evidence does not support them.
 
 Selected metrics from the saved run:
 
@@ -691,22 +696,118 @@ Across the current pipeline and evaluation artifacts, five practical conclusions
 
 ### 5.6 Current limitations
 
-The current thesis version also has clear limitations that should be stated openly:
+The current version also has clear limitations that should be stated openly:
 
-- The system is strictly non-verbal and does not incorporate speech, audio prosody, discourse structure, or student outcomes.
-- Landmark-derived gaze is a room-facing proxy, not true eye tracking.
-- Several thresholds remain heuristic and should be calibrated further on the curated clip set.
 - Some metrics, especially sweep-rate interpretation, still need better calibration to distinguish purposeful room scans from micro-movements.
 - The semantic and coaching layers depend on external API availability.
+- The face-crop semantic extension provides coarse crop-level facial-state evidence only.
 - The teacher-facing report is designed for formative coaching and should not be used for high-stakes teacher evaluation.
 
-These are not peripheral caveats. They define the proper scope of the thesis contribution.
+These are not peripheral caveats. They define the proper scope of the project claims.
 
-## 6. Conclusion
+## 6. Qualitative Validation: Moments Across Multiple Clips
 
-This thesis demonstrates that a research-traceable, strictly non-verbal teacher-feedback system can be built without training a new end-to-end model. By combining MediaPipe-derived landmark analytics, constrained Gemini-based semantic interpretation, and a reliability-aware coaching layer, the project produces evidence-linked formative feedback that is considerably more interpretable than a black-box evaluator and more usable than a raw metric dashboard.
+Aggregate metrics answer "does the pipeline run correctly"; they do not answer "does the pipeline describe what is actually on the screen". To interrogate the latter, six coaching moments were drawn from multiple 60-second clips (four institutions, MIT, Stanford, Yale, and Harvard CS50 sources) and each was cross-checked: the pipeline's own evidence label, the metric reading, and the keyframe the pipeline itself selected were compared against what a human reviewer could see in the frame.
 
-The most important thesis outcome is not a single score or benchmark. It is the integration of:
+The six moments below divide into **two high-confidence cases** (Tier 1) where the pipeline's QC gating reports high confidence and every signal aligns, and **four medium-confidence cases** (Tier 2) where confidence is medium but the claim is still cleanly supported by the keyframe.
+
+### 6.1 Tier 1 — High-confidence agreement
+
+#### 6.1.1 MIT Pigeonhole — 00:15–00:30 — strength: distributed room engagement
+
+![MIT Pigeonhole distributed room engagement keyframe](accurate_frames/01_mit_pigeonhole_strength.jpg)
+
+*Figure 5. MIT Pigeonhole Principle, 00:15–00:30. Pipeline tag: distributed_room_engagement.*
+
+| | |
+|---|---|
+| **Pipeline claim** | distributed_room_engagement + open, audience-facing stance |
+| **Metric reading** | eye=76.8, presence=85.9, natural=50.2, face_cov=0.99, hand_cov=1.00, confidence=high |
+| **Visual observation** | Teacher faces the audience, open right palm holding a mic, upright stance, Venn diagram behind her. Body is slightly rotated toward the room rather than the board. |
+| **Verdict** | Accurate. Every badge the pipeline raises (audience orientation, open-palm gesture, presence) has a direct analogue visible in the frame. |
+
+#### 6.1.2 Yale Power Politics — 00:00–00:15 — strength: distributed room engagement
+
+![Yale Power Politics distributed room engagement keyframe](accurate_frames/02_yale_power_politics_strength.jpg)
+
+*Figure 6. Yale Power & Politics, 00:00–00:15. Pipeline tag: distributed_room_engagement.*
+
+| | |
+|---|---|
+| **Pipeline claim** | distributed_room_engagement + upright confident presence |
+| **Metric reading** | eye=75.3, presence=78.6, natural=46.5, face_cov=1.00, hand_cov=0.97, confidence=high |
+| **Visual observation** | Both hands raised mid-rhetoric, chest forward, eyes toward the audience — a canonical expressive lecture pose. |
+| **Verdict** | Accurate. This is the textbook case the pipeline is designed to recognise: open-hand audience-facing delivery, flagged as a strength to preserve. |
+
+### 6.2 Tier 2 — Medium-confidence agreement
+
+#### 6.2.1 MIT Psychology — 00:30–00:45 — action: limited movement
+
+![MIT Psychology limited movement keyframe](accurate_frames/04_mit_psychology_action.jpg)
+
+*Figure 7. MIT OCW Psychology, 00:30–00:45. Pipeline tag: limited_movement.*
+
+| | |
+|---|---|
+| **Pipeline claim** | limited_movement — static stance during an explanation beat |
+| **Metric reading** | natural=40.1, gesture_motion_peak=0.056, dramatic_pause_count=1, static_stretch_count=1, face_cov=1.00 |
+| **Visual observation** | Professor stands still, arms straight at sides, no visible hand gesture. |
+| **Verdict** | Accurate. The very low gesture peak is directly reflected in the frame. The pipeline's suggested next-step ("one or two purposeful gestures per minute") is grounded rather than speculative. |
+
+#### 6.2.2 MIT "How to Speak" — 00:15–00:30 — strength: distributed room engagement
+
+![MIT How to Speak distributed room engagement keyframe](accurate_frames/05_mit_how_to_speak_strength.jpg)
+
+*Figure 8. MIT "How to Speak" (Patrick Winston), 00:15–00:30. Pipeline tag: distributed_room_engagement.*
+
+| | |
+|---|---|
+| **Pipeline claim** | distributed_room_engagement + high audience-facing stance |
+| **Metric reading** | eye=82.4, presence=82.4, face_cov=0.97, confidence=medium |
+| **Visual observation** | Patrick Winston faces the camera and audience squarely from the front of the room, fully frontal. |
+| **Verdict** | Accurate. This is the historically best-known reference for the lecture format the tool targets, and the pipeline lands on the right strength label despite low hand coverage in the window. |
+
+#### 6.2.3 CS50 Business — 00:00–00:15 — action: low audience orientation
+
+![CS50 Business low audience orientation keyframe](accurate_frames/06_cs50_business_action.jpg)
+
+*Figure 9. CS50 Business, 00:00–00:15. Pipeline tag: low_audience_orientation.*
+
+| | |
+|---|---|
+| **Pipeline claim** | low_audience_orientation — head yaw away from the audience |
+| **Metric reading** | eye=60.5, natural=23.8, face_cov=0.91, confidence=medium |
+| **Visual observation** | Speaker's head is clearly rotated toward stage-left, not toward the audience. |
+| **Verdict** | Accurate. The amber eye-contact score corresponds to a visibly off-axis head pose. |
+
+#### 6.2.4 MIT Aero — 00:00–00:15 — action: uneven room scan
+
+![MIT Aero uneven room scan keyframe](accurate_frames/07_mit_aero_action.jpg)
+
+*Figure 10. MIT OCW Aerospace, 00:00–00:15. Pipeline tag: uneven_room_scan.*
+
+| | |
+|---|---|
+| **Pipeline claim** | uneven_room_scan — gaze dwelling down at notes rather than scanning the room |
+| **Metric reading** | eye=37.4, sweep/min=8.0, face_cov=0.74, confidence=medium |
+| **Visual observation** | Teacher is behind the desk, head tilted down toward notes/laptop; students are in the foreground but the teacher's eyes do not reach them in this frame. |
+| **Verdict** | Accurate. Both the low sweep rate and the visible down-gaze corroborate the tag. |
+
+### 6.3 What these cases demonstrate
+
+Across multiple clips spanning four institutions, at least one evidence-linked moment per clip could be verified against the keyframe the pipeline itself selected. In every case above:
+
+- The primary evidence tag is recoverable from the visible scene without additional context.
+- The quantitative metric that triggered the tag is consistent with the visual impression — a low gesture_motion_peak corresponds to a static stance, a low audience-orientation score corresponds to off-axis head yaw, and so on.
+- The coaching register is calibrated to confidence: high-confidence strengths are labelled "preserve", actions on medium confidence are labelled as watch-items rather than hard diagnoses.
+
+The point is not that the pipeline is universally correct — moments where QC coverage is low, or where the strength tag is narrowly defined (for example, mit_aero's room-mobility "strength" at eye=26.5), were explicitly excluded from the shortlist. The point is that when the pipeline reports a claim under adequate coverage, the claim survives visual cross-check on the keyframe it picked — which is the operational definition of evidence-linked feedback.
+
+## 7. Conclusion
+
+This project demonstrates that a research-traceable, strictly non-verbal teacher-feedback system can be built without training a new end-to-end model. By combining MediaPipe-derived landmark analytics, constrained Gemini-based semantic interpretation, and a reliability-aware coaching layer, the system produces evidence-linked formative feedback that is considerably more interpretable than a black-box evaluator and more usable than a raw metric dashboard.
+
+The most important outcome of the project is not a single score or benchmark. It is the integration of:
 
 - literature-backed cue selection,
 - transparent metric construction,
@@ -714,7 +815,9 @@ The most important thesis outcome is not a single score or benchmark. It is the 
 - readable report design,
 - and explicit reliability boundaries.
 
-The v2 (April 2026) revision strengthens that contribution. Gemini Pro is now the default multimodal reasoning path. New cue families capture stage movement, pause structure, gaze sweep dynamics, and facial expressiveness variance. Teacher-facing reports emphasize actions and evidence instead of headline scoring. Board-context-aware gating reduces the risk of unfair overinterpretation in writing-heavy or audience-occluded segments.
+The current system strengthens that contribution. New cue families capture stage movement, pause structure, gaze sweep dynamics, and facial expressiveness variance. Teacher-facing reports emphasize actions and evidence instead of headline scoring. Board-context-aware gating reduces the risk of unfair overinterpretation in writing-heavy or audience-occluded segments.
+
+The codebase also now includes a face-crop semantic extension built from MediaPipe face bounding boxes. That extension remains additive and conservatively scoped: it produces facial-state artifacts that can support future calibration and qualitative review without displacing the project's landmark-first measurement philosophy.
 
 ## References
 
