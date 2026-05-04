@@ -78,9 +78,16 @@ else
   info "Virtual environment created."
 fi
 
-VENV_PYTHON="$VENV_DIR/bin/python"
-VENV_PIP="$VENV_DIR/bin/pip"
-VENV_STREAMLIT="$VENV_DIR/bin/streamlit"
+# Detect venv layout (bin/ on Mac/Linux, Scripts/ on Windows)
+if [[ -f "$VENV_DIR/bin/pip" ]]; then
+  VENV_PYTHON="$VENV_DIR/bin/python"
+  VENV_PIP="$VENV_DIR/bin/pip"
+  VENV_STREAMLIT="$VENV_DIR/bin/streamlit"
+else
+  VENV_PYTHON="$VENV_DIR/Scripts/python"
+  VENV_PIP="$VENV_DIR/Scripts/pip"
+  VENV_STREAMLIT="$VENV_DIR/Scripts/streamlit"
+fi
 
 # ── 4. Install requirements ───────────────────────────────────────────────────
 if [[ ! -f "$REQUIREMENTS" ]]; then
