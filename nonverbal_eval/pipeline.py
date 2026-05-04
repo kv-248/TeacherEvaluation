@@ -92,23 +92,35 @@ def log_event(events_path: Path, event: str, **payload: Any) -> None:
 
 
 def _clip01(value: float) -> float:
+    if not np.isfinite(value):
+        return 0.0
     return float(np.clip(value, 0.0, 1.0))
 
 
 def _score_linear(value: float, low: float, high: float) -> float:
+    if not (np.isfinite(value) and np.isfinite(low) and np.isfinite(high)):
+        return 0.0
     if high <= low:
         return 0.0
     return _clip01((value - low) / (high - low))
 
 
 def _score_inverse(value: float, low: float, high: float) -> float:
+    if not (np.isfinite(value) and np.isfinite(low) and np.isfinite(high)):
+        return 0.0
     if high <= low:
         return 0.0
     return 1.0 - _clip01((value - low) / (high - low))
 
 
 def _score_peak(value: float, low: float, mid: float, high: float) -> float:
-    if not (low < mid < high):
+    if not (
+        np.isfinite(value)
+        and np.isfinite(low)
+        and np.isfinite(mid)
+        and np.isfinite(high)
+        and low < mid < high
+    ):
         return 0.0
     if value <= low or value >= high:
         return 0.0
@@ -153,6 +165,17 @@ def _safe_std(values: pd.Series | np.ndarray | list[float], default: float = 0.0
     if arr.size == 0 or np.all(np.isnan(arr)):
         return default
     return float(np.nanstd(arr))
+
+
+def _safe_max(values: pd.Series | np.ndarray | list[float], default: float = 0.0) -> float:
+    arr = np.asarray(values, dtype=float)
+    if arr.size == 0 or np.all(np.isnan(arr)):
+        return default
+    return float(np.nanmax(arr))
+
+
+def _finite_or(value: float, default: float = 0.0) -> float:
+    return float(value) if np.isfinite(value) else float(default)
 
 
 def _uniformity_score(counts: list[int] | np.ndarray) -> float:
@@ -224,6 +247,14 @@ def _run_lengths(states: list[int], time_per_step: float) -> list[dict[str, floa
 def _lm_xy(landmarks: list[Any], index: int) -> np.ndarray:
     landmark = landmarks[index]
     return np.array([landmark.x, landmark.y], dtype=np.float32)
+
+
+def _lm_visibility(landmarks: list[Any], index: int) -> float:
+    return float(getattr(landmarks[index], "visibility", 1.0))
+
+
+def _point_in_frame(point: np.ndarray, *, margin: float, y_max: float) -> bool:
+    return bool(-margin <= float(point[0]) <= 1.0 + margin and -margin <= float(point[1]) <= y_max)
 
 
 def _dist(a: np.ndarray, b: np.ndarray) -> float:
@@ -379,6 +410,9 @@ def _extract_frame_metrics(results: Any, pose_landmark_enum: Any) -> dict[str, A
         "mid_shoulder_x": np.nan,
         "mid_ankle_x": np.nan,
         "mid_ankle_y": np.nan,
+        "left_ankle_visibility": np.nan,
+        "right_ankle_visibility": np.nan,
+        "lower_body_visible_frame": 0,
         "left_wrist_x": np.nan,
         "left_wrist_y": np.nan,
         "right_wrist_x": np.nan,
@@ -417,12 +451,24 @@ def _extract_frame_metrics(results: Any, pose_landmark_enum: Any) -> dict[str, A
         nose = _lm_xy(lm, pose_landmark_enum.NOSE.value)
         l_wrist = _lm_xy(lm, pose_landmark_enum.LEFT_WRIST.value)
         r_wrist = _lm_xy(lm, pose_landmark_enum.RIGHT_WRIST.value)
+        l_ankle_visibility = _lm_visibility(lm, pose_landmark_enum.LEFT_ANKLE.value)
+        r_ankle_visibility = _lm_visibility(lm, pose_landmark_enum.RIGHT_ANKLE.value)
 
         mid_shoulder = (l_shoulder + r_shoulder) / 2.0
         mid_hip = (l_hip + r_hip) / 2.0
         mid_ankle = (l_ankle + r_ankle) / 2.0
         shoulder_width = _dist(l_shoulder, r_shoulder)
         torso_len = _dist(mid_shoulder, mid_hip)
+        prox_cfg = _BASE_THRESHOLDS["proxemics"]
+        ankle_visibility_min = float(prox_cfg["ankle_visibility_min"])
+        frame_margin = float(prox_cfg["lower_body_frame_margin"])
+        lower_body_y_max = float(prox_cfg["lower_body_y_max"])
+        lower_body_visible = (
+            min(l_ankle_visibility, r_ankle_visibility) >= ankle_visibility_min
+            and _point_in_frame(l_ankle, margin=frame_margin, y_max=lower_body_y_max)
+            and _point_in_frame(r_ankle, margin=frame_margin, y_max=lower_body_y_max)
+            and _point_in_frame(mid_ankle, margin=frame_margin, y_max=lower_body_y_max)
+        )
 
         shoulder_tilt = abs(l_shoulder[1] - r_shoulder[1]) / (shoulder_width + EPS)
         torso_lean = abs(mid_shoulder[0] - mid_hip[0]) / (torso_len + EPS)
@@ -447,6 +493,9 @@ def _extract_frame_metrics(results: Any, pose_landmark_enum: Any) -> dict[str, A
                 "mid_shoulder_x": float(mid_shoulder[0]),
                 "mid_ankle_x": float(mid_ankle[0]),
                 "mid_ankle_y": float(mid_ankle[1]),
+                "left_ankle_visibility": l_ankle_visibility,
+                "right_ankle_visibility": r_ankle_visibility,
+                "lower_body_visible_frame": int(lower_body_visible),
                 "left_wrist_x": float(l_wrist[0]),
                 "left_wrist_y": float(l_wrist[1]),
                 "right_wrist_x": float(r_wrist[0]),
@@ -541,6 +590,8 @@ def _extract_frame_metrics(results: Any, pose_landmark_enum: Any) -> dict[str, A
 
 def _compute_motion_signals(df: pd.DataFrame, fps: float) -> tuple[pd.DataFrame, dict[str, float]]:
     motion_df = df.copy()
+    if "lower_body_visible_frame" not in motion_df:
+        motion_df["lower_body_visible_frame"] = 0.0
     for col in [
         "left_wrist_x",
         "left_wrist_y",
@@ -551,10 +602,14 @@ def _compute_motion_signals(df: pd.DataFrame, fps: float) -> tuple[pd.DataFrame,
         "mid_hip_y",
         "mid_ankle_x",
         "mid_ankle_y",
+        "lower_body_visible_frame",
         "arm_span_ratio",
         "signed_yaw_proxy",
     ]:
-        motion_df[col] = motion_df[col].interpolate(limit_direction="both")
+        if col == "lower_body_visible_frame":
+            motion_df[col] = pd.to_numeric(motion_df[col], errors="coerce").fillna(0.0)
+        else:
+            motion_df[col] = motion_df[col].interpolate(limit_direction="both")
 
     left_speed = np.sqrt(
         np.diff(motion_df["left_wrist_x"], prepend=motion_df["left_wrist_x"].iloc[0]) ** 2
@@ -572,15 +627,21 @@ def _compute_motion_signals(df: pd.DataFrame, fps: float) -> tuple[pd.DataFrame,
     hip_drift = np.sqrt(hip_dx**2 + hip_dy**2) / shoulder_width.to_numpy()
     motion_df["hip_drift"] = hip_drift
 
-    anchor_x = motion_df["mid_ankle_x"].copy()
-    anchor_y = motion_df["mid_ankle_y"].copy()
-    lower_body_mask = anchor_x.notna() & anchor_y.notna()
-    anchor_x = anchor_x.fillna(motion_df["mid_hip_x"])
-    anchor_y = anchor_y.fillna(motion_df["mid_hip_y"])
-    motion_df["floor_x"] = _normalize_series(anchor_x)
-    motion_df["floor_y"] = _normalize_series(anchor_y)
+    lower_body_mask = (
+        (motion_df["lower_body_visible_frame"] >= 0.5)
+        & motion_df["mid_ankle_x"].notna()
+        & motion_df["mid_ankle_y"].notna()
+    )
+    anchor_x = motion_df["mid_ankle_x"].where(lower_body_mask)
+    anchor_y = motion_df["mid_ankle_y"].where(lower_body_mask)
+    motion_df["floor_x"] = _normalize_series(anchor_x).where(lower_body_mask)
+    motion_df["floor_y"] = _normalize_series(anchor_y).where(lower_body_mask)
 
-    horizontal_range = motion_df["mid_hip_x"].max() - motion_df["mid_hip_x"].min()
+    lower_body_coverage = float(lower_body_mask.mean()) if len(lower_body_mask) else 0.0
+    if lower_body_coverage >= float(_BASE_THRESHOLDS["proxemics"]["lower_body_coverage_min"]) and anchor_x.dropna().size >= 2:
+        horizontal_range = float(anchor_x.max() - anchor_x.min())
+    else:
+        horizontal_range = 0.0
     signal = gesture_motion
     if len(signal) > 15 and fps > 8:
         b, a = cheby1(4, 0.5, 4 / (fps / 2), btype="low")
@@ -651,15 +712,15 @@ def _compute_motion_signals(df: pd.DataFrame, fps: float) -> tuple[pd.DataFrame,
     motion_df["pause_state"] = pause_state
 
     return motion_df, {
-        "gesture_motion_mean": float(np.nanmean(gesture_motion)),
-        "gesture_motion_peak": float(np.nanmax(gesture_motion)),
-        "gesture_motion_std": float(np.nanstd(gesture_motion)),
-        "hip_drift_mean": float(np.nanmean(hip_drift)),
+        "gesture_motion_mean": _safe_mean(gesture_motion),
+        "gesture_motion_peak": _safe_max(gesture_motion),
+        "gesture_motion_std": _safe_std(gesture_motion),
+        "hip_drift_mean": _safe_mean(hip_drift),
         "stage_range": float(horizontal_range),
-        "ldlj_smoothness_raw": float(ldlj),
-        "sal_smoothness_raw": float(sal),
+        "ldlj_smoothness_raw": _finite_or(ldlj),
+        "sal_smoothness_raw": _finite_or(sal),
         "pause_events": pause_events,
-        "lower_body_coverage": float(lower_body_mask.mean()) if len(lower_body_mask) else 0.0,
+        "lower_body_coverage": lower_body_coverage,
     }
 
 
@@ -667,7 +728,10 @@ def _compute_proxemics(df: pd.DataFrame) -> dict[str, Any]:
     prox_cfg = _BASE_THRESHOLDS["proxemics"]
     valid = df["floor_x"].notna() & df["floor_y"].notna()
     valid_count = int(valid.sum())
-    lower_body_coverage = _coverage_ratio(df["mid_ankle_x"])
+    if "lower_body_visible_frame" in df:
+        lower_body_coverage = float(pd.to_numeric(df["lower_body_visible_frame"], errors="coerce").fillna(0.0).mean())
+    else:
+        lower_body_coverage = _coverage_ratio(df["mid_ankle_x"])
     empty = {
         "available": False,
         "lower_body_coverage": lower_body_coverage,
@@ -877,6 +941,9 @@ def _build_summary(df: pd.DataFrame, motion_stats: dict[str, float], clip_info: 
 
     audience_orientation_score = _safe_mean(df["audience_orientation_score_frame"])
     posture_score = _safe_mean(df["posture_score_frame"])
+    posture_cfg = _BASE_THRESHOLDS["scorecard"]["posture"]
+    if pose_coverage < float(posture_cfg["low_pose_coverage_min"]):
+        posture_score = min(posture_score, float(posture_cfg["low_pose_coverage_cap"]))
     gesture_extent_mean = _safe_mean(df["gesture_extent_frame"])
     arm_span_mean = _safe_mean(df["arm_span_ratio"])
     open_palm_ratio = _safe_mean(df["open_palm_frame"])
@@ -900,10 +967,32 @@ def _build_summary(df: pd.DataFrame, motion_stats: dict[str, float], clip_info: 
         + 0.35 * _score_linear(motion_stats["gesture_motion_mean"], 0.004, 0.035)
         + 0.20 * _clip01(open_palm_ratio * 1.25 + pointing_ratio * 1.50)
     )
+    smoothness_cfg = _BASE_THRESHOLDS["scorecard"]["gesture_smoothness"]
+    sal_weight = float(smoothness_cfg["sal_weight"])
+    ldlj_weight = float(smoothness_cfg["ldlj_weight"])
+    smoothness_weight_total = sal_weight + ldlj_weight
+    if smoothness_weight_total <= EPS:
+        sal_weight = ldlj_weight = 0.5
+        smoothness_weight_total = 1.0
     gesture_smoothness_score = 100.0 * (
-        0.55 * _score_linear(motion_stats["sal_smoothness_raw"], -6.0, -1.2)
-        + 0.45 * _score_linear(motion_stats["ldlj_smoothness_raw"], 4.0, 16.0)
+        (sal_weight / smoothness_weight_total)
+        * _score_linear(
+            motion_stats["sal_smoothness_raw"],
+            float(smoothness_cfg["sal_low"]),
+            float(smoothness_cfg["sal_high"]),
+        )
+        + (ldlj_weight / smoothness_weight_total)
+        * _score_linear(
+            motion_stats["ldlj_smoothness_raw"],
+            float(smoothness_cfg["ldlj_low"]),
+            float(smoothness_cfg["ldlj_high"]),
+        )
     )
+    if (
+        hand_coverage < float(smoothness_cfg["no_visible_hand_coverage_max"])
+        and pose_coverage < float(smoothness_cfg["no_visible_pose_coverage_max"])
+    ):
+        gesture_smoothness_score = float(smoothness_cfg["no_visible_teacher_score"])
     expressiveness_cfg = _BASE_THRESHOLDS["expressiveness"]
     expressiveness_score = 100.0 * (
         0.45 * _score_linear(facial_expressiveness["smile_rolling_std_mean"], float(expressiveness_cfg["flatness_std"]), 0.035)
@@ -915,16 +1004,46 @@ def _build_summary(df: pd.DataFrame, motion_stats: dict[str, float], clip_info: 
         + 0.15 * _score_linear(facial_smile_std, 0.005, 0.030)
         + 0.40 * (expressiveness_score / 100.0)
     )
-    base_stage_usage_score = 100.0 * _score_linear(motion_stats["stage_range"], 0.04, 0.30)
+    stage_cfg = _BASE_THRESHOLDS["scorecard"]["stage_usage"]
+    stage_range_low = float(stage_cfg["stage_range_low"])
+    stage_range_high = float(stage_cfg["stage_range_high"])
+    base_weight = float(stage_cfg["base_weight"])
+    proxemics_weight = float(stage_cfg["proxemics_weight"])
+    stage_weight_total = base_weight + proxemics_weight
+    if stage_weight_total <= EPS:
+        base_weight = proxemics_weight = 0.5
+        stage_weight_total = 1.0
+    coverage_weight = float(stage_cfg["coverage_weight"])
+    static_zone_weight = float(stage_cfg["static_zone_weight"])
+    prox_weight_total = coverage_weight + static_zone_weight
+    if prox_weight_total <= EPS:
+        coverage_weight = static_zone_weight = 0.5
+        prox_weight_total = 1.0
+
+    base_stage_usage_score = 100.0 * _score_linear(motion_stats["stage_range"], stage_range_low, stage_range_high)
     proxemics_stage_score = 100.0 * (
-        0.55 * _score_linear(movement_presence["coverage_area_pct"], 15.0, float(_BASE_THRESHOLDS["proxemics"]["coverage_good_pct"]))
-        + 0.45 * _score_inverse(movement_presence["static_zone_time_pct"], float(_BASE_THRESHOLDS["proxemics"]["static_dwell_pct"]), 90.0)
+        (coverage_weight / prox_weight_total)
+        * _score_linear(
+            movement_presence["coverage_area_pct"],
+            float(stage_cfg["coverage_low_pct"]),
+            float(_BASE_THRESHOLDS["proxemics"]["coverage_good_pct"]),
+        )
+        + (static_zone_weight / prox_weight_total)
+        * _score_inverse(
+            movement_presence["static_zone_time_pct"],
+            float(_BASE_THRESHOLDS["proxemics"]["static_dwell_pct"]),
+            float(stage_cfg["static_high_pct"]),
+        )
     )
-    stage_usage_score = (
-        0.50 * base_stage_usage_score + 0.50 * proxemics_stage_score
-        if movement_presence["available"]
-        else base_stage_usage_score
-    )
+    if movement_presence["available"]:
+        stage_usage_score = (
+            (base_weight / stage_weight_total) * base_stage_usage_score
+            + (proxemics_weight / stage_weight_total) * proxemics_stage_score
+        )
+        if movement_presence["lower_body_coverage"] < float(_BASE_THRESHOLDS["proxemics"]["stage_reliable_lower_body_coverage_min"]):
+            stage_usage_score = min(stage_usage_score, float(_BASE_THRESHOLDS["proxemics"]["stage_low_coverage_cap"]))
+    else:
+        stage_usage_score = float(_BASE_THRESHOLDS["proxemics"]["stage_unavailable_score"])
 
     sector_counts = {
         "left": int((df["gaze_sector"] == -1).sum()),
@@ -944,6 +1063,9 @@ def _build_summary(df: pd.DataFrame, motion_stats: dict[str, float], clip_info: 
         + 0.35 * (sector_balance_score / 100.0)
         + 0.20 * (room_scan_score / 100.0)
     )
+    eye_cfg = _BASE_THRESHOLDS["scorecard"]["eye_contact"]
+    if face_coverage < float(eye_cfg["low_face_coverage_min"]):
+        eye_contact_distribution_score = min(eye_contact_distribution_score, float(eye_cfg["low_face_coverage_cap"]))
 
     pause_cfg = _BASE_THRESHOLDS["pause"]
     pause_quality_score = 50.0
@@ -976,12 +1098,28 @@ def _build_summary(df: pd.DataFrame, motion_stats: dict[str, float], clip_info: 
         + 0.25 * _score_linear(gesture_extent_mean, 1.40, 2.10)
         + 0.20 * _score_linear(gaze_transition_rate, 1.00, 2.50)
     )
+    affect_cfg = _BASE_THRESHOLDS["scorecard"]["positive_affect"]
+    affect_weights = {
+        "smile_mean": float(affect_cfg["smile_mean_weight"]),
+        "smile_std": float(affect_cfg["smile_std_weight"]),
+        "open_palm": float(affect_cfg["open_palm_weight"]),
+        "expressiveness": float(affect_cfg["expressiveness_weight"]),
+    }
+    affect_weight_total = sum(affect_weights.values())
+    if affect_weight_total <= EPS:
+        affect_weights = {"smile_mean": 0.42, "smile_std": 0.14, "open_palm": 0.14, "expressiveness": 0.30}
+        affect_weight_total = 1.0
     positive_affect_score = 100.0 * (
-        0.42 * _score_linear(facial_smile_mean, 0.32, 0.44)
-        + 0.14 * _score_linear(facial_smile_std, 0.006, 0.028)
-        + 0.14 * _score_linear(open_palm_ratio, 0.10, 0.75)
-        + 0.30 * (expressiveness_score / 100.0)
+        (affect_weights["smile_mean"] / affect_weight_total)
+        * _score_linear(facial_smile_mean, float(affect_cfg["smile_mean_low"]), float(affect_cfg["smile_mean_high"]))
+        + (affect_weights["smile_std"] / affect_weight_total)
+        * _score_linear(facial_smile_std, float(affect_cfg["smile_std_low"]), float(affect_cfg["smile_std_high"]))
+        + (affect_weights["open_palm"] / affect_weight_total)
+        * _score_linear(open_palm_ratio, float(affect_cfg["open_palm_low"]), float(affect_cfg["open_palm_high"]))
+        + (affect_weights["expressiveness"] / affect_weight_total) * (expressiveness_score / 100.0)
     )
+    if face_coverage < float(affect_cfg["low_face_coverage_min"]):
+        positive_affect_score = min(positive_affect_score, float(affect_cfg["low_face_coverage_cap"]))
     tension_hostility_risk = 100.0 * (
         0.35 * _score_inverse(facial_smile_mean, 0.28, 0.36)
         + 0.20 * _score_inverse(facial_smile_std, 0.006, 0.022)
@@ -1129,6 +1267,7 @@ def _build_summary(df: pd.DataFrame, motion_stats: dict[str, float], clip_info: 
             "signed_yaw_std": signed_yaw_std,
             "stage_range": motion_stats["stage_range"],
             "base_stage_usage_score": base_stage_usage_score,
+            "proxemics_stage_score": proxemics_stage_score,
             "pause_quality_score": pause_quality_score,
             "expressiveness_score": expressiveness_score,
             "ldlj_smoothness_raw": motion_stats["ldlj_smoothness_raw"],

@@ -1,0 +1,21 @@
+# Local development — all packages needed to run the Streamlit app.
+# Use Python 3.11. mediapipe 0.10.21 does not support Python 3.12+.
+#
+# Install:  pip install -r requirements_local.txt
+# Run:      streamlit run streamlit_app.py
+
+# Core computer vision
+numpy<2.0
+opencv-python<4.12
+mediapipe==0.10.21
+scipy
+pandas
+matplotlib
+Pillow
+
+# Report generation
+markdown
+weasyprint
+
+# Streamlit UI
+streamlit>=1.42,<1.46

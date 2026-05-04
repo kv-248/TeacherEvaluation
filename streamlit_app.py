@@ -1233,22 +1233,10 @@ def main() -> None:
     summary = results["summary"]["scores"]
     qc = results["summary"]["quality_control"]
 
-    with st.container(border=True):
-        _render_section_heading(
-            "Result overview",
-            "A quick dashboard-style read on the run before you move into the detailed report sections below.",
-        )
-        _render_report_overview(report, summary, qc)
-
     st.subheader("Scorecard")
     _render_scorecard(report, summary)
     st.subheader("At a Glance")
     st.write(report["executive_summary"])
-    st.caption(
-        f"Stage usage: {summary['stage_usage_score']:.1f} | "
-        f"Eye-contact distribution: {summary['eye_contact_distribution_score']:.1f} | "
-        f"Face coverage: {qc['face_coverage']:.2f}"
-    )
 
     _render_no_material_intervention(report)
     _render_priority_actions(report)
