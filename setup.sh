@@ -25,6 +25,70 @@ info()  { echo -e "${GREEN}[setup]${NC} $*"; }
 warn()  { echo -e "${YELLOW}[warn] ${NC} $*"; }
 abort() { echo -e "${RED}[error]${NC} $*"; exit 1; }
 
+install_python311() {
+  local PY_VER="3.11.9"
+  local OS
+  OS=$(uname -s 2>/dev/null)
+
+  case "$OS" in
+    Darwin)
+      if command -v brew &>/dev/null 2>&1; then
+        info "Installing Python $PY_VER via Homebrew..."
+        brew install python@3.11
+        PYTHON=$(brew --prefix python@3.11)/bin/python3.11
+      else
+        info "Downloading Python $PY_VER for macOS (~40 MB)..."
+        curl -fL "https://www.python.org/ftp/python/${PY_VER}/python-${PY_VER}-macos11.pkg" \
+          -o /tmp/python311.pkg
+        sudo installer -pkg /tmp/python311.pkg -target /
+        rm -f /tmp/python311.pkg
+        PYTHON=$(command -v python3.11 2>/dev/null || echo "")
+      fi
+      ;;
+    Linux)
+      if command -v apt-get &>/dev/null 2>&1; then
+        info "Installing Python $PY_VER via apt..."
+        if command -v add-apt-repository &>/dev/null 2>&1; then
+          sudo add-apt-repository -y ppa:deadsnakes/ppa 2>/dev/null || true
+        fi
+        sudo apt-get update -qq
+        sudo apt-get install -y python3.11 python3.11-venv python3.11-distutils
+        PYTHON=$(command -v python3.11 2>/dev/null || echo "")
+      elif command -v dnf &>/dev/null 2>&1; then
+        info "Installing Python $PY_VER via dnf..."
+        sudo dnf install -y python3.11
+        PYTHON=$(command -v python3.11 2>/dev/null || echo "")
+      else
+        abort "Cannot auto-install Python 3.11 on this system. Install it from https://www.python.org/downloads/"
+      fi
+      ;;
+    MINGW*|CYGWIN*|MSYS*)
+      if command -v winget &>/dev/null 2>&1; then
+        info "Installing Python $PY_VER via winget..."
+        winget install --id Python.Python.3.11 --silent \
+          --accept-package-agreements --accept-source-agreements
+        PYTHON="py -3.11"
+      else
+        info "Downloading Python $PY_VER installer for Windows (~25 MB)..."
+        local EXE="/tmp/python311_installer.exe"
+        curl -fL "https://www.python.org/ftp/python/${PY_VER}/python-${PY_VER}-amd64.exe" \
+          -o "$EXE"
+        "$EXE" /quiet InstallAllUsers=0 PrependPath=1 Include_launcher=1
+        rm -f "$EXE"
+        PYTHON="py -3.11"
+      fi
+      ;;
+    *)
+      abort "Unsupported OS '$OS'. Install Python 3.11 manually: https://www.python.org/downloads/"
+      ;;
+  esac
+
+  [[ -z "$PYTHON" ]] && abort "Python 3.11 install failed. Install it manually: https://www.python.org/downloads/"
+  VERSION=$($PYTHON -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')" 2>/dev/null || echo "")
+  [[ -z "$VERSION" ]] && abort "Python 3.11 not usable after install. Try again or install manually."
+  info "Python $VERSION ready."
+}
+
 # ── 1. Python version check ───────────────────────────────────────────────────
 info "Checking Python version..."
 PYTHON=""
@@ -50,15 +114,8 @@ if [[ -z "$PYTHON" ]] && command -v py &>/dev/null 2>&1; then
 fi
 
 if [[ -z "$PYTHON" ]]; then
-  warn "Python 3.11 not found. Falling back to default python3..."
-  PYTHON=$(command -v python3 || command -v python || abort "No Python found. Install Python 3.11 from https://www.python.org/downloads/")
-  VERSION=$($PYTHON -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
-  MINOR=$(echo "$VERSION" | cut -d. -f2)
-  if [[ "$MINOR" -ge 12 ]]; then
-    abort "Python $VERSION detected. mediapipe 0.10.21 does not support Python 3.12+.
-Install Python 3.11 from https://www.python.org/downloads/ and re-run."
-  fi
-  warn "Using Python $VERSION — 3.11 is recommended."
+  warn "Python 3.11 not found — auto-installing..."
+  install_python311
 else
   info "Found Python $VERSION at $PYTHON"
 fi
