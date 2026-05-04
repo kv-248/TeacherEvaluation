@@ -40,10 +40,19 @@ for candidate in python3.11 python3 python; do
   fi
 done
 
+# Windows py launcher: try py -3.11 (works even when python3.11 isn't on PATH)
+if [[ -z "$PYTHON" ]] && command -v py &>/dev/null 2>&1; then
+  if py -3.11 -c "import sys" &>/dev/null 2>&1; then
+    PYTHON="py -3.11"
+    VERSION="3.11"
+    info "Found Python 3.11 via Windows py launcher (py -3.11)"
+  fi
+fi
+
 if [[ -z "$PYTHON" ]]; then
   warn "Python 3.11 not found. Falling back to default python3..."
   PYTHON=$(command -v python3 || command -v python || abort "No Python found. Install Python 3.11 from https://www.python.org/downloads/")
-  VERSION=$("$PYTHON" -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
+  VERSION=$($PYTHON -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
   MINOR=$(echo "$VERSION" | cut -d. -f2)
   if [[ "$MINOR" -ge 12 ]]; then
     abort "Python $VERSION detected. mediapipe 0.10.21 does not support Python 3.12+.
@@ -74,7 +83,7 @@ if [[ -d "$VENV_DIR" ]]; then
   info "Virtual environment already exists at $VENV_DIR — skipping creation."
 else
   info "Creating virtual environment at $VENV_DIR..."
-  "$PYTHON" -m venv "$VENV_DIR"
+  $PYTHON -m venv "$VENV_DIR"
   info "Virtual environment created."
 fi
 
