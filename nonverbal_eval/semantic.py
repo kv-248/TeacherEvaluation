@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 import math
 import re
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -28,6 +30,7 @@ class SemanticConfig:
     qwen_model: str = str(_QWEN_CONFIG["model"])
     qwen_max_new_tokens: int = int(_QWEN_CONFIG["max_new_tokens"])
     qwen_temperature: float = float(_QWEN_CONFIG["temperature"])
+    qwen_parallel_requests: int = int(_QWEN_CONFIG.get("parallel_requests", 4))
 
 
 @dataclass(slots=True)
@@ -176,6 +179,17 @@ def _build_qwen_annotation(sample: SemanticSample, parsed: dict[str, Any], raw_t
         if annotation[field] not in allowed_values:
             annotation[field] = "ambiguous" if "ambiguous" in allowed_values else "medium"
     return annotation
+
+
+def _sample_context_lines(sample: SemanticSample, sample_index: int | None = None) -> list[str]:
+    prefix = f"sample_index: {sample_index}; " if sample_index is not None else ""
+    return [
+        f"- {prefix}timestamp_sec: {sample.timestamp_sec:.2f}",
+        f"- {prefix}sample_reason: {sample.reason}",
+        f"- {prefix}floor_x: {sample.context.get('floor_x', 'n/a')}",
+        f"- {prefix}floor_y: {sample.context.get('floor_y', 'n/a')}",
+        f"- {prefix}pause_state: {sample.context.get('pause_state', 'moving')}",
+    ]
 
 
 def build_semantic_artifacts(run_dir: Path) -> SemanticArtifacts:
@@ -336,42 +350,73 @@ def _run_qwen(
         return result
 
     annotations: list[dict[str, Any]] = []
+    event_lock = threading.Lock()
+
+    def record_event(event: str, **payload: Any) -> None:
+        with event_lock:
+            log_event(events_path, event, **payload)
+
+    def run_single_sample(sample: SemanticSample) -> dict[str, Any]:
+        parsed, raw_text = generate_gemini_json(
+            model_name=config.qwen_model,
+            system_instruction=(
+                "You are reviewing a single frame from a classroom lecture video. "
+                "Return only the JSON object that matches the schema. "
+                "Use only the allowed enum values for categorical fields."
+            ),
+            user_text=QWEN_PROMPT
+            + "\n\nFrame context:\n"
+            + "\n".join(_sample_context_lines(sample))
+            + "\nUse the image as primary evidence and the context only as supporting metadata.",
+            image_paths=[sample.image_path],
+            max_output_tokens=max(int(config.qwen_max_new_tokens), 1024),
+            temperature=0.0,
+            response_json_schema=_gemini_annotation_schema(),
+            request_metadata_recorder=lambda payload, ts=sample.timestamp_sec: record_event(
+                "semantic_gemini_request",
+                timestamp_sec=round(ts, 2),
+                **payload,
+            ),
+        )
+        return _build_qwen_annotation(sample, parsed, raw_text)
+
+    max_workers = max(1, min(int(config.qwen_parallel_requests), len(samples)))
     try:
-        for sample in samples:
-            context_lines = [
-                f"- timestamp_sec: {sample.timestamp_sec:.2f}",
-                f"- sample_reason: {sample.reason}",
-                f"- floor_x: {sample.context.get('floor_x', 'n/a')}",
-                f"- floor_y: {sample.context.get('floor_y', 'n/a')}",
-                f"- pause_state: {sample.context.get('pause_state', 'moving')}",
-            ]
-            parsed, raw_text = generate_gemini_json(
-                model_name=config.qwen_model,
-                system_instruction=(
-                    "You are reviewing a single frame from a classroom lecture video. "
-                    "Return only the JSON object that matches the schema. "
-                    "Use only the allowed enum values for categorical fields."
-                ),
-                user_text=QWEN_PROMPT
-                + "\n\nFrame context:\n"
-                + "\n".join(context_lines)
-                + "\nUse the image as primary evidence and the context only as supporting metadata.",
-                image_paths=[sample.image_path],
-                max_output_tokens=max(int(config.qwen_max_new_tokens), 1024),
-                temperature=0.0,
-                response_json_schema=_gemini_annotation_schema(),
-                request_metadata_recorder=lambda payload, ts=sample.timestamp_sec: log_event(
-                    events_path,
-                    "semantic_gemini_request",
-                    timestamp_sec=round(ts, 2),
-                    **payload,
-                ),
+        if max_workers > 1:
+            record_event(
+                "semantic_gemini_parallel_started",
+                sample_count=len(samples),
+                max_workers=max_workers,
+                timestamps_sec=[round(sample.timestamp_sec, 2) for sample in samples],
             )
-            annotations.append(_build_qwen_annotation(sample, parsed, raw_text))
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                annotations = list(executor.map(run_single_sample, samples))
+            record_event(
+                "semantic_gemini_parallel_completed",
+                sample_count=len(annotations),
+                max_workers=max_workers,
+            )
+        else:
+            annotations = [run_single_sample(sample) for sample in samples]
     except Exception as exc:
-        result["status"] = "failed"
-        result["reason"] = f"Semantic review unavailable: {sanitize_gemini_error_message(exc)}"
-        return result
+        if max_workers <= 1:
+            result["status"] = "failed"
+            result["reason"] = f"Semantic review unavailable: {sanitize_gemini_error_message(exc)}"
+            return result
+        record_event(
+            "semantic_gemini_parallel_failed_fallback_serial",
+            sample_count=len(samples),
+            max_workers=max_workers,
+            reason=sanitize_gemini_error_message(exc),
+        )
+        annotations = []
+        try:
+            for sample in samples:
+                annotations.append(run_single_sample(sample))
+        except Exception as fallback_exc:
+            result["status"] = "failed"
+            result["reason"] = f"Semantic review unavailable: {sanitize_gemini_error_message(fallback_exc)}"
+            return result
 
     focus_counts = pd.Series([row["teacher_focus"] for row in annotations]).value_counts().to_dict()
     action_counts = pd.Series([row["body_action"] for row in annotations]).value_counts().to_dict()

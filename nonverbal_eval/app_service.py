@@ -118,8 +118,8 @@ def _ensure_gemini_ready(
         raise RuntimeError(
             "Gemini API key missing in the runtime environment. "
             f"The requested Gemini-backed features were: {feature_text}. "
-            "Set GEMINI_API_KEY (preferred) or GOOGLE_API_KEY in the shell that runs Docker Compose, "
-            "or add GEMINI_API_KEY=... to TeacherEvaluation/.env before rerunning."
+            "Set GEMINI_API_KEY (preferred) or GOOGLE_API_KEY in the shell that runs Streamlit/Docker Compose, "
+            "or add GEMINI_API_KEY=... to TeacherEvaluation/.env before rerunning setup.sh."
         )
 
     for model_name, features in sorted(model_features.items()):
@@ -430,6 +430,8 @@ def run_teacher_evaluation(
         "evaluate_full_clip_finished",
         frames=summary["quality_control"]["frames_analyzed"],
         overall_score=summary["scores"]["heuristic_nonverbal_score"],
+        scores=summary["scores"],
+        quality_control=summary["quality_control"],
     )
 
     _emit(progress_callback, "keyframe_summary_started")

@@ -227,6 +227,7 @@ DEFAULT_QWEN_PROMPTS: dict[str, Any] = {
         "model": DEFAULT_GEMINI_MODEL,
         "temperature": 0.0,
         "max_new_tokens": 180,
+        "parallel_requests": 4,
         "prompt": (
             "You are reviewing a single frame from a classroom lecture video.\n"
             "Return JSON only with exactly these keys:\n"

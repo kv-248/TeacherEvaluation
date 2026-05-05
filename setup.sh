@@ -24,11 +24,35 @@ RED='\033[0;31m'; YELLOW='\033[1;33m'; GREEN='\033[0;32m'; NC='\033[0m'
 info()  { echo -e "${GREEN}[setup]${NC} $*"; }
 warn()  { echo -e "${YELLOW}[warn] ${NC} $*"; }
 abort() { echo -e "${RED}[error]${NC} $*"; exit 1; }
+is_wsl() { [[ -f /proc/version ]] && grep -qi microsoft /proc/version 2>/dev/null; }
+
+load_env_file() {
+  local file="$1"
+  [[ -f "$file" ]] || return 0
+  while IFS='=' read -r key value; do
+    key="${key#export }"
+    key="${key%%[[:space:]]*}"
+    [[ "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || continue
+    value="${value%%$'\r'}"
+    value="${value#"${value%%[![:space:]]*}"}"
+    value="${value%"${value##*[![:space:]]}"}"
+    value="${value%\"}"
+    value="${value#\"}"
+    value="${value%\'}"
+    value="${value#\'}"
+    export "$key=$value"
+  done < <(grep -E '^(export[[:space:]]+)?[A-Za-z_][A-Za-z0-9_]*=' "$file" || true)
+}
 
 install_python311() {
   local PY_VER="3.11.9"
   local OS
   OS=$(uname -s 2>/dev/null)
+
+  # WSL: install on the Windows side and invoke via py.exe to avoid slow/broken apt
+  if [[ "$OS" == "Linux" ]] && is_wsl; then
+    OS="WSL"
+  fi
 
   case "$OS" in
     Darwin)
@@ -47,34 +71,37 @@ install_python311() {
       ;;
     Linux)
       if command -v apt-get &>/dev/null 2>&1; then
-        info "Installing Python $PY_VER via apt..."
-        if command -v add-apt-repository &>/dev/null 2>&1; then
-          sudo add-apt-repository -y ppa:deadsnakes/ppa 2>/dev/null || true
-        fi
-        sudo apt-get update -qq
-        sudo apt-get install -y python3.11 python3.11-venv python3.11-distutils
+        info "Installing Python $PY_VER via apt (ubuntu repos)..."
+        sudo apt-get install -y python3.11 python3.11-venv python3.11-distutils 2>/dev/null \
+          || sudo apt-get install -y python3.11 python3.11-venv
         PYTHON=$(command -v python3.11 2>/dev/null || echo "")
       elif command -v dnf &>/dev/null 2>&1; then
         info "Installing Python $PY_VER via dnf..."
         sudo dnf install -y python3.11
         PYTHON=$(command -v python3.11 2>/dev/null || echo "")
       else
-        abort "Cannot auto-install Python 3.11 on this system. Install it from https://www.python.org/downloads/"
+        abort "Cannot auto-install Python 3.11. Install it from https://www.python.org/downloads/"
       fi
       ;;
-    MINGW*|CYGWIN*|MSYS*)
-      if command -v winget &>/dev/null 2>&1; then
+    WSL|MINGW*|CYGWIN*|MSYS*)
+      local WINGET=""
+      command -v winget.exe &>/dev/null 2>&1 && WINGET="winget.exe"
+      command -v winget     &>/dev/null 2>&1 && WINGET="winget"
+      if [[ -n "$WINGET" ]]; then
         info "Installing Python $PY_VER via winget..."
-        winget install --id Python.Python.3.11 --silent \
+        "$WINGET" install --id Python.Python.3.11 --silent \
           --accept-package-agreements --accept-source-agreements
-        PYTHON="py -3.11"
       else
         info "Downloading Python $PY_VER installer for Windows (~25 MB)..."
-        local EXE="/tmp/python311_installer.exe"
         curl -fL "https://www.python.org/ftp/python/${PY_VER}/python-${PY_VER}-amd64.exe" \
-          -o "$EXE"
-        "$EXE" /quiet InstallAllUsers=0 PrependPath=1 Include_launcher=1
-        rm -f "$EXE"
+          -o /tmp/python311_installer.exe
+        /tmp/python311_installer.exe /quiet InstallAllUsers=0 PrependPath=1 Include_launcher=1
+        rm -f /tmp/python311_installer.exe
+      fi
+      # WSL uses py.exe; Git Bash uses py
+      if command -v py.exe &>/dev/null 2>&1; then
+        PYTHON="py.exe -3.11"
+      else
         PYTHON="py -3.11"
       fi
       ;;
@@ -104,7 +131,16 @@ for candidate in python3.11 python3 python; do
   fi
 done
 
-# Windows py launcher: try py -3.11 (works even when python3.11 isn't on PATH)
+# WSL: Windows py launcher is py.exe
+if [[ -z "$PYTHON" ]] && is_wsl; then
+  if py.exe -3.11 -c "import sys" &>/dev/null 2>&1; then
+    PYTHON="py.exe -3.11"
+    VERSION="3.11"
+    info "Found Python 3.11 via Windows py launcher in WSL (py.exe -3.11)"
+  fi
+fi
+
+# Native Windows Git Bash: py -3.11
 if [[ -z "$PYTHON" ]] && command -v py &>/dev/null 2>&1; then
   if py -3.11 -c "import sys" &>/dev/null 2>&1; then
     PYTHON="py -3.11"
@@ -168,8 +204,12 @@ info "Packages installed."
 # ── 5. Check .env / GEMINI_API_KEY ────────────────────────────────────────────
 info "Checking API key..."
 KEY_OK=false
+load_env_file "$ENV_FILE"
 
-if [[ -f "$ENV_FILE" ]]; then
+if [[ -n "${GEMINI_API_KEY:-}" && "${GEMINI_API_KEY:-}" != "your_key_here" ]]; then
+  KEY_OK=true
+  info "GEMINI_API_KEY loaded from environment."
+elif [[ -f "$ENV_FILE" ]]; then
   KEY=$(grep -E "^GEMINI_API_KEY=" "$ENV_FILE" | cut -d= -f2- | tr -d '[:space:]"')
   if [[ -n "$KEY" && "$KEY" != "your_key_here" ]]; then
     KEY_OK=true

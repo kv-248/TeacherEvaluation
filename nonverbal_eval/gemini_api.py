@@ -25,6 +25,30 @@ _JITTER_SEC = 0.35
 _PREFLIGHT_MAX_OUTPUT_TOKENS = 32
 
 
+def _dotenv_value(name: str) -> str | None:
+    env_paths = [Path.cwd() / ".env", Path(__file__).resolve().parents[1] / ".env"]
+    for env_path in env_paths:
+        if not env_path.exists():
+            continue
+        try:
+            lines = env_path.read_text(encoding="utf-8").splitlines()
+        except OSError:
+            continue
+        for raw_line in lines:
+            line = raw_line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            key = key.strip()
+            if key.startswith("export "):
+                key = key.removeprefix("export ").strip()
+            if key != name:
+                continue
+            value = value.strip().strip('"').strip("'")
+            return value or None
+    return None
+
+
 def is_gemini_model(model_name: str) -> bool:
     normalized = normalize_gemini_model_name(model_name)
     return normalized.startswith("gemini-")
@@ -41,6 +65,11 @@ def get_gemini_api_key() -> str | None:
     for env_name in ("GEMINI_API_KEY", "GOOGLE_API_KEY"):
         value = os.getenv(env_name, "").strip()
         if value:
+            return value
+    for env_name in ("GEMINI_API_KEY", "GOOGLE_API_KEY"):
+        value = _dotenv_value(env_name)
+        if value:
+            os.environ.setdefault(env_name, value)
             return value
     return None
 

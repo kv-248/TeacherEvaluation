@@ -8,14 +8,11 @@ from html import escape
 from pathlib import Path
 from typing import Any
 
-import cv2
 import streamlit as st
-
-from nonverbal_eval.app_service import run_teacher_evaluation
-from nonverbal_eval.runtime_config import DEFAULT_GEMINI_MODEL
 
 
 APP_TITLE = "TeacherEvaluation"
+DEFAULT_GEMINI_MODEL = "gemini-2.5-pro"
 MAX_UPLOAD_DURATION_SEC = 5 * 60
 WORK_ROOT = Path("local_data/streamlit")
 UPLOAD_ROOT = WORK_ROOT / "uploads"
@@ -71,6 +68,8 @@ def _ensure_dirs() -> None:
 
 
 def _video_info(video_path: Path) -> dict[str, float]:
+    import cv2
+
     cap = cv2.VideoCapture(str(video_path))
     if not cap.isOpened():
         raise RuntimeError(f"Could not open uploaded video: {video_path}")
@@ -112,12 +111,16 @@ def _semantic_model_name(default: str = DEFAULT_GEMINI_MODEL) -> str:
     )
 
 
+def _run_teacher_evaluation(**kwargs: Any) -> dict[str, Any]:
+    from nonverbal_eval.app_service import run_teacher_evaluation
+
+    return run_teacher_evaluation(**kwargs)
+
+
 def _inject_theme() -> None:
     st.markdown(
         """
         <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=EB+Garamond:wght@700;800&display=swap');
-
         :root {
             --te-bg: #060e20;
             --te-surface: rgba(255, 255, 255, 0.045);
@@ -1170,6 +1173,7 @@ def main() -> None:
         )
         stage_placeholder = st.empty()
         progress_bar = st.progress(0.0, text="Starting evaluation")
+    core_score_placeholder = st.empty()
 
     ordered_stages = [
         "start",
@@ -1195,10 +1199,27 @@ def main() -> None:
         label = STAGE_LABELS.get(stage, stage.replace("_", " ").title())
         progress_bar.progress(stage_to_progress.get(stage, 0.0), text=label)
         _render_status(stage_placeholder, stage, label, tone="active")
+        scores = payload.get("scores")
+        if stage == "evaluate_full_clip_finished" and isinstance(scores, dict):
+            with core_score_placeholder.container():
+                with st.container(border=True):
+                    _render_section_heading(
+                        "Core scorecard ready",
+                        "The five nonverbal scores are available now. Gemini interpretation, coaching, and PDF export are still running.",
+                    )
+                    _render_scorecard({}, scores)
+                    quality_control = payload.get("quality_control") or {}
+                    frames = payload.get("frames", quality_control.get("frames_analyzed", "n/a"))
+                    st.caption(
+                        "Core CV pass complete"
+                        f" · frames analyzed: {frames}"
+                        f" · pose coverage: {float(quality_control.get('pose_coverage', 0.0)):.0%}"
+                        f" · face coverage: {float(quality_control.get('face_coverage', 0.0)):.0%}"
+                    )
 
     try:
         _render_status(stage_placeholder, "start", STAGE_LABELS["start"], tone="active")
-        results = run_teacher_evaluation(
+        results = _run_teacher_evaluation(
             video=uploaded_path,
             output_root=RUN_ROOT,
             start_sec=0.0,
@@ -1233,6 +1254,7 @@ def main() -> None:
     summary = results["summary"]["scores"]
     qc = results["summary"]["quality_control"]
 
+    core_score_placeholder.empty()
     st.subheader("Scorecard")
     _render_scorecard(report, summary)
     st.subheader("At a Glance")
